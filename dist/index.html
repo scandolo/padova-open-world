@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101b22"><meta name="description" content="Explore Padua at real-world scale in a playable 3D browser sandbox, in the present day or in the stylised Renaissance Galileo mode.">
+  <meta name="theme-color" content="#101b22"><meta name="description" content="Explore Padua at real-world scale in a playable 3D browser sandbox. Drive, walk, deliver, race and escape the police.">
   <title>PADOVA — Open World</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%23101b22' width='64' height='64' rx='12'/%3E%3Ctext x='14' y='49' fill='%23ffc56a' font-family='Arial' font-weight='bold' font-size='46'%3EP%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./hud.css">
-  <link rel="stylesheet" href="./renaissance.css">
 </head>
 <body>
   <canvas id="world" aria-label="Padua 3D game world"></canvas>
@@ -21,13 +20,9 @@
     <div class="edition"><span></span> A CITY YOU KNOW. YOUR STREETS.</div>
     <h1>PADOVA<span>AFTER HOURS.</span></h1>
     <p>Take the long way home.</p>
-    <div class="intro-actions era-choice">
-      <button id="playBtn" class="primary" disabled>Building the city…</button>
-      <button id="play1500Btn" class="era-button">Modalità Galileo</button>
-      <button id="aboutBtn" class="textbutton">About this world <span>↗</span></button>
-    </div>
+    <div class="intro-actions"><button id="playBtn" class="primary" disabled>Building the city…</button><button id="aboutBtn" class="textbutton">About this world <span>↗</span></button></div>
     <div class="loading"><div id="loadingBar"></div></div><div id="loadingText" class="small">Loading Padua’s streets and buildings</div>
-    <div class="intro-foot">WASD TO MOVE <span> / </span> E TO ENTER A VEHICLE <span> / </span> CHOOSE PRESENT DAY OR GALILEO</div>
+    <div class="intro-foot">WASD TO MOVE <span> / </span> E TO ENTER A VEHICLE <span> / </span> MADE FOR KEYBOARD + TRACKPAD</div>
   </section>
   <div id="playingUI" hidden>
     <aside class="hud mission"><div class="eyebrow" id="missionType">FREE ROAM</div><h2 id="missionTitle">The city is yours.</h2><p id="missionDesc">Explore, borrow a car, or pick an activity.</p><div id="missionTimer"></div><button id="activityBtn">Choose an activity <span>J</span></button></aside>
@@ -49,16 +44,6 @@
   <dialog id="menu"><div class="dialog-head"><div><span class="eyebrow">PADOVA / YOUR CITY</span><h2 id="menuTitle">Take a breather.</h2></div><button class="close" id="closeMenu" aria-label="Close menu">×</button></div><div id="menuContent"></div></dialog>
   <dialog id="mapDialog"><div class="dialog-head"><div><span class="eyebrow">CITY MAP</span><h2>Know your way around.</h2></div><button class="close" id="closeMap" aria-label="Close map">×</button></div><div class="map-layout"><div class="fullmap-wrap"><canvas id="fullmap" width="1000" height="1000" aria-label="Full map; click to set waypoint"></canvas></div><div id="mapPlaces"></div></div><div class="map-legend"><span>● You</span><span>◆ Destination</span><span>Click the map to set a waypoint</span></div></dialog>
   <footer id="credits"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a><a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Terrain: Copernicus EU-DEM / USGS via Mapzen</a><span id="modelCredits"></span><span id="scaleCredit">Real-world scale · stylised reconstruction</span></footer>
-  <script type="module">
-    const historic=new URLSearchParams(location.search).get('era')==='1500';
-    const eraButton=document.getElementById('play1500Btn');
-    if(historic){
-      document.documentElement.dataset.era='1500';
-      import('./renaissance-game.js');
-    }else{
-      eraButton.onclick=()=>{const u=new URL(location.href);u.searchParams.set('era','1500');location.href=u;};
-      import('./game.js');
-    }
-  </script>
+  <script type="module" src="./game.js"></script>
 </body>
 </html>
