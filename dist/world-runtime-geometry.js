@@ -12,8 +12,8 @@ function ensureRuntime(world){
  if(world.collisionManager)return;
  world.collisionManager=new BuildingCollisionManager(world.collision,world.terrain);
  world.validationReports=new Map();
- for(const b of world.data?.buildings||[]){b.colliderType='building-footprint';b.collisionOwner=b;b.collisionOwnerId=b.id||b.n||null;b.isIntentionalInvisibleCollider=false;}
- for(const b of world.structures||[]){b.colliderType=b.kind||'road-structure';b.collisionOwner=b.road||b;b.collisionOwnerId=b.road?.surfaceId||null;b.isIntentionalInvisibleCollider=false;}
+ for(const b of world.data?.buildings||[]){b.colliderType='building-footprint';b.collisionOwner=b;b.collisionOwnerId=b.id||b.n||null;b.isIntentionalInvisibleCollider=false;world.collisionManager.all.add(b);}
+ for(const b of world.structures||[]){b.colliderType=b.kind||'road-structure';b.collisionOwner=b.road||b;b.collisionOwnerId=b.road?.surfaceId||null;b.isIntentionalInvisibleCollider=false;world.collisionManager.all.add(b);}
 }
 const midpoint=(a,b,terrain)=>({x:(a.x+b.x)/2,z:(a.z+b.z)/2,y:terrain.getTerrainHeight((a.x+b.x)/2,(a.z+b.z)/2)-GROUND_RENDER_OFFSET,c:a.c.map((v,i)=>(v+b.c[i])/2),uv:a.uv.map((v,i)=>(v+b.uv[i])/2)});
 const edge=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
