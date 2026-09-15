@@ -2,6 +2,7 @@
 // Units are metres. Three.js and the gameplay collision system use Y-up.
 export const WORLD_UNITS='metres';
 export const ROAD_SURFACE_OFFSET=.06;
+export const WALKABLE_SURFACE_OFFSET=.05;
 export const CURB_HEIGHT=.14;
 export const TRAM_RAIL_OFFSET=.015;
 export const SURFACE_EPSILON=.04;
