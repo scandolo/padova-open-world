@@ -1,7 +1,6 @@
-import {nearestOnSegment} from './core.js';
 import {
   ROAD_ALIGNMENT_TOLERANCE,PHYSICS_ALIGNMENT_TOLERANCE,SEAM_TOLERANCE,
-  CURB_HEIGHT,GROUND_RENDER_OFFSET,SURFACE_EPSILON,SURFACE_TYPES
+  CURB_HEIGHT,GROUND_RENDER_OFFSET,SURFACE_EPSILON,SURFACE_TYPES,ROAD_SURFACE_OFFSET
 } from './world-geometry-config.js';
 
 const DRIVABLE=/^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|living_street|unclassified|service)$/;
@@ -25,15 +24,15 @@ export class WorldValidator{
  static auditRoad(s,r,terrain){
   const road=s.road||s.profile?.road;if(!road)return;const len=Math.hypot(s.b[0]-s.a[0],s.b[1]-s.a[1]);if(len<.01)return;
   const n=Math.max(1,Math.ceil(len/3)),dx=(s.b[0]-s.a[0])/len,dz=(s.b[1]-s.a[1])/len,nx=-dz,nz=dx;
-  for(let j=0;j<=n;j++){const t=j/n,x=s.a[0]+(s.b[0]-s.a[0])*t,z=s.a[1]+(s.b[1]-s.a[1])*t,base=this.segmentHeight(terrain,s,t,x,z),expected=base+.06;r.testedVertices++;
+  for(let j=0;j<=n;j++){const t=j/n,x=s.a[0]+(s.b[0]-s.a[0])*t,z=s.a[1]+(s.b[1]-s.a[1])*t,base=this.segmentHeight(terrain,s,t,x,z),expected=base+ROAD_SURFACE_OFFSET;r.testedVertices++;
    if(!finite(expected)){push(r,'missingSurfaces',{x,z,road:road.surfaceId});continue;}
    const physical=terrain.getWalkableSurfaceHeight?terrain.getWalkableSurfaceHeight(x,z,expected):terrain.height(x,z,expected),delta=Math.abs(physical-expected);r.maxHeightError=Math.max(r.maxHeightError,finite(delta)?delta:Infinity);
    if(!finite(physical)||delta>PHYSICS_ALIGNMENT_TOLERANCE){push(r,'physicsMismatch',{x,z,expected,actual:physical,road:road.surfaceId});if(DRIVABLE.test(road.k))push(r,'roadErrors',{x,z,reason:'physics mismatch',delta});}
    const special=road.isBridge||road.isTunnel||road.crossing||road.tunnel||Number(road.layer)!==0;
    if(!special&&DRIVABLE.test(road.k)){const ground=terrain.getTerrainHeight?terrain.getTerrainHeight(x,z):terrain.groundHeight(x,z),renderedGround=ground-GROUND_RENDER_OFFSET;if(renderedGround>expected-SURFACE_EPSILON)push(r,'roadErrors',{x,z,reason:'terrain intrusion',roadTop:expected,ground:renderedGround});}
    if(road.isBridge||road.crossing){const water=terrain.waterHeight(x,z),ground=terrain.getPreciseHeight?terrain.getPreciseHeight(x,z):terrain.elevation(x,z);if(expected<=Math.max(water,ground)+.2)push(r,'bridgeErrors',{x,z,reason:'bridge clearance',expected,under:Math.max(water,ground)});}
-   if(SIDEWALK.test(road.k)){const near=[...terrain.roads.candidates(x,z,4)].filter(c=>c.road!==road&&DRIVABLE.test(c.road.k)&&!c.road.isBridge&&!c.road.isTunnel);if(near.length){const anchor=near.sort((a,b)=>a.d-b.d)[0].height+.06,d=expected-anchor;if(d<-.03||d>CURB_HEIGHT+.18)push(r,'sidewalkErrors',{x,z,delta:d,expectedCurb:CURB_HEIGHT});}}
-   if(road.k==='tram'){const near=[...terrain.roads.candidates(x,z,4)].filter(c=>c.road!==road&&DRIVABLE.test(c.road.k));if(near.length&&!road.isBridge&&!road.isTunnel){const d=Math.abs(expected-(near[0].height+.06));if(d>.12)push(r,'roadErrors',{x,z,reason:'tram/road mismatch',delta:d});}}
+   if(SIDEWALK.test(road.k)){const near=[...terrain.roads.candidates(x,z,4)].filter(c=>c.road!==road&&DRIVABLE.test(c.road.k)&&!c.road.isBridge&&!c.road.isTunnel);if(near.length){const anchor=near.sort((a,b)=>a.d-b.d)[0].height+ROAD_SURFACE_OFFSET,d=expected-anchor;if(d<-.03||d>CURB_HEIGHT+.18)push(r,'sidewalkErrors',{x,z,delta:d,expectedCurb:CURB_HEIGHT});}}
+   if(road.k==='tram'){const near=[...terrain.roads.candidates(x,z,4)].filter(c=>c.road!==road&&DRIVABLE.test(c.road.k));if(near.length&&!road.isBridge&&!road.isTunnel){const d=Math.abs(expected-(near[0].height+ROAD_SURFACE_OFFSET));if(d>.12)push(r,'roadErrors',{x,z,reason:'tram/road mismatch',delta:d});}}
    if(!special&&DRIVABLE.test(road.k))for(const side of [-1,1]){const off=road.w/2+.9,gx=x+nx*off*side,gz=z+nz*off*side,g=terrain.getTerrainHeight?terrain.getTerrainHeight(gx,gz):terrain.groundHeight(gx,gz);if(!finite(g))push(r,'missingSurfaces',{x:gx,z:gz,reason:'road edge ground missing'});}
   }
  }
@@ -43,5 +42,12 @@ export class WorldValidator{
    const normal=g.getAttribute?.('normal');if(normal)for(const n of normal.array)if(!finite(n)){push(r,'invalidGeometry',{reason:'invalid normal'});break;}
    if(g.boundingBox&&(!finite(g.boundingBox.min.x)||!finite(g.boundingBox.max.x)))push(r,'invalidGeometry',{reason:'invalid bounding box'});
   });}
+ static scanArea({terrain,center,radius=45,coarse=5,dense=1}={}){
+  const report={center,radius,coarse,dense,tested:0,anomalies:[],passed:true};if(!terrain||!center){report.passed=false;report.anomalies.push({reason:'missing terrain or center'});return report;}
+  const test=(x,z)=>{report.tested++;const info=terrain.getSurfaceInfo?.(x,z),h=info?.height??terrain.height?.(x,z);if(!finite(h)){report.anomalies.push({x,z,reason:'missing surface'});return;}if(info?.road){const physics=terrain.getWalkableSurfaceHeight?.(x,z,h)??terrain.height(x,z,h),delta=Math.abs(physics-h);if(!finite(physics)||delta>PHYSICS_ALIGNMENT_TOLERANCE)report.anomalies.push({x,z,reason:'render/physics surface mismatch',delta,type:info.type});}if(info?.isRiver){const bed=terrain.getTerrainHeight?.(x,z),water=terrain.waterHeight?.(x,z);if(!finite(bed)||!finite(water)||bed>=water-SURFACE_EPSILON)report.anomalies.push({x,z,reason:'riverbed not below water',bed,water});}};
+  const coarseHits=[];for(let x=center.x-radius;x<=center.x+radius;x+=coarse)for(let z=center.z-radius;z<=center.z+radius;z+=coarse){const before=report.anomalies.length;test(x,z);if(report.anomalies.length>before)coarseHits.push({x,z});}
+  const seen=new Set();for(const a of coarseHits)for(let x=a.x-coarse;x<=a.x+coarse;x+=dense)for(let z=a.z-coarse;z<=a.z+coarse;z+=dense){const key=x.toFixed(2)+','+z.toFixed(2);if(seen.has(key))continue;seen.add(key);test(x,z);}
+  report.passed=!report.anomalies.length;return report;
+ }
  static finish(r){r.passed=!(r.roadErrors||r.sidewalkErrors||r.seamErrors||r.colliderErrors||r.missingSurfaces||r.physicsMismatch||r.bridgeErrors||r.riverErrors||r.invalidGeometry);return r;}
 }
