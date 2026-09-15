@@ -1,0 +1,24 @@
+name: Temporary world geometry check
+on:
+  push:
+    branches:
+      - work/world-geometry-overhaul
+  workflow_dispatch:
+
+jobs:
+  geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Legacy test suite
+        run: npm test
+      - name: Modern test suite
+        run: npm run test:modern
+      - name: Level audit
+        run: npm run audit:levels
+      - name: Geometry acceptance suite
+        run: npm run test:geometry
