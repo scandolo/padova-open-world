@@ -13,6 +13,7 @@ export const GROUND_RENDER_OFFSET=.08;
 export const TERRAIN_BASE_TILE=16;
 export const TERRAIN_DENSE_TILE=4;
 export const ROAD_SKIRT_DEPTH=.45;
+export const BRIDGE_DECK_THICKNESS=.35;
 export const RIVER_CHANNEL_DEPTH=1.5;
 export const RIVER_BANK_BLEND=11;
 export const BRIDGE_CLEARANCE=5.4;
