@@ -8,6 +8,7 @@
     "audit:map": "node tools/audit-map.mjs",
     "test:modern": "node verify-overlaps.mjs && node verify-modern.mjs",
     "audit:modern": "node tools/audit-modern.mjs",
-    "audit:levels": "node tools/audit-levels.mjs"
+    "audit:levels": "node tools/audit-levels.mjs",
+    "test:geometry": "node verify-world-geometry.mjs"
   }
 }
