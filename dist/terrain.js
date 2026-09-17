@@ -36,7 +36,15 @@ export class Terrain {
   }return {distance,level};}
   waterDistance(x,z){return this.waterSample(x,z).distance;}
   bridge(x,z,margin=0,referenceY=null){return this.roads?.bridge(x,z,referenceY)||null;}
-  waterAt(x,z,margin=0,referenceY=null){if(this.modern){const support=this.roads.at(x,z,referenceY,margin);if(support&&support.height>this.waterHeight(x,z)+.5)return null;}const prato=this.prato(x,z);if(prato)return prato.canal&&!prato.bridge?this.pratoHeight-1.5:null;if(this.modern){const road=this.roads.at(x,z,referenceY,margin);if(road&&road.height>this.waterHeight(x,z)+.5)return null;}if(this.bridge(x,z,margin,referenceY))return null;return this.waterDistance(x,z)<margin?this.waterHeight(x,z):null;}
+  waterAt(x,z,margin=0,referenceY=null){
+    // A bridge only masks the water for an actor actually on its deck. Otherwise
+    // someone falling beneath an overpass could never trigger water recovery.
+    if(this.modern){const support=this.roads.at(x,z,referenceY,margin);if(support&&(referenceY===null||referenceY>=support.height-.75)&&support.height>this.waterHeight(x,z)+.5)return null;}
+    const prato=this.prato(x,z);if(prato)return prato.canal&&!prato.bridge?this.pratoHeight-1.5:null;
+    if(this.modern){const road=this.roads.at(x,z,referenceY,margin);if(road&&(referenceY===null||referenceY>=road.height-.75)&&road.height>this.waterHeight(x,z)+.5)return null;}
+    const crossing=this.bridge(x,z,margin,referenceY);if(crossing&&(referenceY===null||referenceY>=crossing.height-.75))return null;
+    return this.waterDistance(x,z)<margin?this.waterHeight(x,z):null;
+  }
   groundHeight(x,z){
     const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.canal?-3:0);
     let raw=this.elevation(x,z);
@@ -50,7 +58,31 @@ export class Terrain {
     }
     const d=this.waterDistance(x,z);if(this.modern&&road&&road.d<=road.road.w/2&&!gradeSeparated)return raw;if(d>10)return raw;const channel=this.waterHeight(x,z)-1.5;return channel+(Math.max(raw,this.waterHeight(x,z)+.8)-channel)*smooth((d+1)/11);
   }
-  height(x,z,referenceY=null){if(this.modern){const support=this.roads.at(x,z,referenceY);if(support)return support.height+ROAD_TOP;}const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.bridge?.36:prato.canal?-3:.18);const road=this.roads?.at(x,z,referenceY);return road?road.height+ROAD_TOP:this.groundHeight(x,z)+.05;}
+  height(x,z,referenceY=null){
+    if(this.modern){
+      const support=this.roads.at(x,z,referenceY);
+      if(support){
+        const top=support.height+ROAD_TOP;
+        // Do not teleport a vehicle from below an overpass onto its elevated deck.
+        if(referenceY!==null&&support.road.crossing&&top-referenceY>1.25)return this.groundHeight(x,z)+.05;
+        return top;
+      }
+      // Road meshes include a 30 cm verge and, on ordinary streets, a 1.2 m
+      // pavement. The physics support must extend over precisely these edges;
+      // otherwise a wheel crossing the visible pavement abruptly drops into
+      // the interpolated terrain or riverbank.
+      const verge=this.roads.at(x,z,referenceY,1.2);
+      if(verge){
+        const road=verge.road,separated=road.crossing||road.tunnel||Number(road.layer)!==0;
+        const urban=!/^(motorway|motorway_link|trunk|trunk_link|track|path|footway|cycleway|pedestrian|steps|tram)$/.test(road.k);
+        const margin=urban&&!separated&&this.waterDistance(x,z)>1?1.2:.3;
+        const top=verge.height+ROAD_TOP;
+        if(verge.d<=road.w/2+margin&&(referenceY===null||Math.abs(top-referenceY)<1.25))return top+(margin> .3?.012:-.035);
+      }
+    }
+    const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.bridge?.36:prato.canal?-3:.18);
+    const road=this.roads?.at(x,z,referenceY);return road?road.height+ROAD_TOP:this.groundHeight(x,z)+.05;
+  }
   slope(x,z,yaw,wheelbase=2.5,referenceY=null){const dx=Math.sin(yaw)*wheelbase/2,dz=Math.cos(yaw)*wheelbase/2;return -Math.atan2(this.height(x+dx,z+dz,referenceY)-this.height(x-dx,z-dz,referenceY),wheelbase);}
   dry(x,z,radius=.4,referenceY=null){for(const [dx,dz] of [[0,0],[radius,0],[-radius,0],[0,radius],[0,-radius]])if(this.waterAt(x+dx,z+dz,0,referenceY)!==null)return false;return true;}
 }
