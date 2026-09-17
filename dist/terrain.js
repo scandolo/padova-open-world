@@ -31,14 +31,13 @@ export class Terrain {
   prato(x,z){const p=pratoLocal(x,z);if((p.x/115)**2+(p.z/163)**2>1)return null;const canal=(p.x/90)**2+(p.z/135)**2<1&&(p.x/81)**2+(p.z/126)**2>1;return {canal,bridge:Math.abs(p.x)<5.5||Math.abs(p.z)<4.5};}
   waterSample(x,z){let distance=Infinity,level;for(const r of this.waterIndex.near(x,z)){
     let d=Infinity;if(r.p){for(let i=0;i<r.p.length;i++){const q=nearestOnSegment(x,z,r.p[i],r.p[(i+1)%r.p.length]);d=Math.min(d,Math.hypot(q.x-x,q.z-z));}if(pointInside(x,z,r.p))d=-Math.max(.01,d);}
-    else{const q=nearestOnSegment(x,z,r.a,r.b);d=Math.hypot(q.x-x,q.z-z)-r.w/2;}
+    else{const q=nearestOnSegment(x,z,r.a,r.b);d=Math.hypot(q.x-x,q.y??q.z-z)-r.w/2;}
     if(d<distance){distance=d;level=r.level;}
   }return {distance,level};}
   waterDistance(x,z){return this.waterSample(x,z).distance;}
   bridge(x,z,margin=0,referenceY=null){return this.roads?.bridge(x,z,referenceY)||null;}
   waterAt(x,z,margin=0,referenceY=null){
-    // A bridge only masks the water for an actor actually on its deck. Otherwise
-    // someone falling beneath an overpass could never trigger water recovery.
+    // A bridge masks water only for an actor actually on the deck.
     if(this.modern){const support=this.roads.at(x,z,referenceY,margin);if(support&&(referenceY===null||referenceY>=support.height-.75)&&support.height>this.waterHeight(x,z)+.5)return null;}
     const prato=this.prato(x,z);if(prato)return prato.canal&&!prato.bridge?this.pratoHeight-1.5:null;
     if(this.modern){const road=this.roads.at(x,z,referenceY,margin);if(road&&(referenceY===null||referenceY>=road.height-.75)&&road.height>this.waterHeight(x,z)+.5)return null;}
@@ -48,9 +47,8 @@ export class Terrain {
   groundHeight(x,z){
     const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.canal?-3:0);
     let raw=this.elevation(x,z);
-    // Terrain tiles are 16 m wide, so the road influence must extend beyond a tile
-    // diagonal. This prevents an unsampled grass corner from interpolating through
-    // asphalt while retaining true grade separation for bridges and tunnels.
+    // Terrain tiles are 16 m wide; blend at-grade road approaches across tiles,
+    // but preserve separate elevations beneath bridges and above tunnels.
     const road=this.roads?.at(x,z,null,28),layer=Number(road?.road?.layer)||0,gradeSeparated=!!road&&(road.road.crossing||road.road.tunnel||layer!==0);
     if(road&&!gradeSeparated){
       const apron=Math.max(18,Math.min(26,road.road.w*1.6+12)),blend=1-smooth((road.d-road.road.w/2)/apron);
@@ -63,25 +61,22 @@ export class Terrain {
       const support=this.roads.at(x,z,referenceY);
       if(support){
         const top=support.height+ROAD_TOP;
-        // Do not teleport a vehicle from below an overpass onto its elevated deck.
         if(referenceY!==null&&support.road.crossing&&top-referenceY>1.25)return this.groundHeight(x,z)+.05;
         return top;
       }
       // Road meshes include a 30 cm verge and, on ordinary streets, a 1.2 m
-      // pavement. The physics support must extend over precisely these edges;
-      // otherwise a wheel crossing the visible pavement abruptly drops into
-      // the interpolated terrain or riverbank.
+      // pavement. Use the same support for the wheels beyond the centreline.
       const verge=this.roads.at(x,z,referenceY,1.2);
       if(verge){
         const road=verge.road,separated=road.crossing||road.tunnel||Number(road.layer)!==0;
         const urban=!/^(motorway|motorway_link|trunk|trunk_link|track|path|footway|cycleway|pedestrian|steps|tram)$/.test(road.k);
         const margin=urban&&!separated&&this.waterDistance(x,z)>1?1.2:.3;
         const top=verge.height+ROAD_TOP;
-        if(verge.d<=road.w/2+margin&&(referenceY===null||Math.abs(top-referenceY)<1.25))return top+(margin> .3?.012:-.035);
+        if(verge.d<=road.w/2+margin&&(referenceY===null||Math.abs(top-referenceY)<1.25))return top+(margin>.3?.012:-.035);
       }
+      return this.groundHeight(x,z)+.05;
     }
-    const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.bridge?.36:prato.canal?-3:.18);
-    const road=this.roads?.at(x,z,referenceY);return road?road.height+ROAD_TOP:this.groundHeight(x,z)+.05;
+    const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.bridge?.36:prato.canal?-3:.18);const road=this.roads?.at(x,z,referenceY);return road?road.height+ROAD_TOP:this.groundHeight(x,z)+.05;
   }
   slope(x,z,yaw,wheelbase=2.5,referenceY=null){const dx=Math.sin(yaw)*wheelbase/2,dz=Math.cos(yaw)*wheelbase/2;return -Math.atan2(this.height(x+dx,z+dz,referenceY)-this.height(x-dx,z-dz,referenceY),wheelbase);}
   dry(x,z,radius=.4,referenceY=null){for(const [dx,dz] of [[0,0],[radius,0],[-radius,0],[0,radius],[0,-radius]])if(this.waterAt(x+dx,z+dz,0,referenceY)!==null)return false;return true;}
@@ -90,7 +85,7 @@ export class Terrain {
 export function safeDryRoad(pos,graph,collision,terrain,spec=null,allowed=()=>true){
   const radius=spec?spec.width/2:.4;
   const point=safeRoadPoint(pos,graph,collision,radius,p=>allowed(p)&&p.x>-5960&&p.x<7240&&p.z>-6470&&p.z<6220&&terrain.dry(p.x,p.z,spec?spec.length/2+.3:1)&&(!spec||!vehicleBlocked(p.x,p.z,p.yaw,collision,spec,terrain.roads.sample(p.segment.road,p.x,p.z)+ROAD_TOP)),p=>terrain.roads.sample(p.segment.road,p.x,p.z)+ROAD_TOP);
-  if(point&&terrain.modern)point.y=terrain.roads.sample(point.segment.road,point.x,point.z)+ROAD_TOP;return point;
+  if(point&&terrain.modern)point.y=terrain.roads.sample(point.segment.road,point.x,p.z)+ROAD_TOP;return point;
 }
 
 // Independent from rendering, so falling/recovery remains deterministic at 60 Hz.
