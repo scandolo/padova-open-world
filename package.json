@@ -6,9 +6,10 @@
     "dev": "node tools/serve.mjs",
     "test": "node verify-city.mjs && node verify-terrain.mjs && node verify.mjs",
     "audit:map": "node tools/audit-map.mjs",
-    "test:modern": "node verify-overlaps.mjs && node verify-driveability.mjs && node verify-modern.mjs",
-    "test:driveability": "node verify-driveability.mjs",
+    "test:modern": "node verify-overlaps.mjs && node verify-driveability.mjs && node verify-prato-modern.mjs && node verify-modern.mjs",
+    "test:driveability": "node verify-driveability.mjs && node verify-prato-modern.mjs",
     "audit:modern": "node tools/audit-modern.mjs",
-    "audit:levels": "node tools/audit-levels.mjs"
+    "audit:levels": "node tools/audit-levels.mjs",
+    "audit:driveability": "node tools/audit-levels.mjs && node tools/audit-modern.mjs"
   }
 }
