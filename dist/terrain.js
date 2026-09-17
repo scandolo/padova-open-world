@@ -74,6 +74,10 @@ export class Terrain {
         const top=verge.height+ROAD_TOP;
         if(verge.d<=road.w/2+margin&&(referenceY===null||Math.abs(top-referenceY)<1.25))return top+(margin>.3?.012:-.035);
       }
+      // Prato della Valle has authored island/canal crossings, independent of
+      // the general road graph. Keep their original drivable height references.
+      const prato=this.prato(x,z);
+      if(prato)return this.pratoHeight+(prato.bridge?.36:prato.canal?-3:.18);
       return this.groundHeight(x,z)+.05;
     }
     const prato=this.prato(x,z);if(prato)return this.pratoHeight+(prato.bridge?.36:prato.canal?-3:.18);
