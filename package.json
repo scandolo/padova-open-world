@@ -6,7 +6,8 @@
     "dev": "node tools/serve.mjs",
     "test": "node verify-city.mjs && node verify-terrain.mjs && node verify.mjs",
     "audit:map": "node tools/audit-map.mjs",
-    "test:modern": "node verify-overlaps.mjs && node verify-modern.mjs",
+    "test:modern": "node verify-overlaps.mjs && node verify-driveability.mjs && node verify-modern.mjs",
+    "test:driveability": "node verify-driveability.mjs",
     "audit:modern": "node tools/audit-modern.mjs",
     "audit:levels": "node tools/audit-levels.mjs"
   }
