@@ -1094,7 +1094,7 @@ MonoBehaviour:
   CollisionDistance: 330
   Buildings: 19325
   Chunks: 347
-  BuildMilliseconds: 858.5934
+  BuildMilliseconds: 1324.1602
 --- !u!4 &571351337
 Transform:
   m_ObjectHideFlags: 0
@@ -3343,7 +3343,7 @@ MonoBehaviour:
   - {fileID: 2100000, guid: ddd811b70d8be4c04add32e9da8b7cc3, type: 2}
   - {fileID: 2100000, guid: af7eff2055ec741559292603c5debcd9, type: 2}
   - {fileID: 2100000, guid: eff031f44f9fa44d69e706e5b180695a, type: 2}
-  Count: 32
+  Count: 64
   Destinations:
   - {x: 80, y: 1.4977282, z: 10}
   - {x: 112, y: 1.5695298, z: 0}
@@ -3752,7 +3752,7 @@ MonoBehaviour:
   Vertices: 3156517
   Triangles: 1533557
   Chunks: 43
-  BuildMilliseconds: 587.3717
+  BuildMilliseconds: 534.4044
 --- !u!4 &1117771737
 Transform:
   m_ObjectHideFlags: 0
@@ -3814,6 +3814,7 @@ MonoBehaviour:
   Home: {x: 0, y: 0, z: 0}
   HomeRotation: {x: 0, y: 0, z: 0, w: 0}
   DistanceTravelled: 0
+  Impacts: 0
 --- !u!4 &1130679459
 Transform:
   m_ObjectHideFlags: 0
@@ -4129,6 +4130,7 @@ MonoBehaviour:
   Home: {x: 0, y: 0, z: 0}
   HomeRotation: {x: 0, y: 0, z: 0, w: 0}
   DistanceTravelled: 0
+  Impacts: 0
 --- !u!4 &1185353049
 Transform:
   m_ObjectHideFlags: 0
@@ -4520,6 +4522,7 @@ MonoBehaviour:
   Home: {x: 0, y: 0, z: 0}
   HomeRotation: {x: 0, y: 0, z: 0, w: 0}
   DistanceTravelled: 0
+  Impacts: 0
 --- !u!4 &1473735911
 Transform:
   m_ObjectHideFlags: 0
@@ -5133,6 +5136,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1732967908}
   - component: {fileID: 1732967907}
+  - component: {fileID: 1732967910}
+  - component: {fileID: 1732967909}
   m_Layer: 0
   m_Name: Open world
   m_TagString: Untagged
@@ -5160,6 +5165,8 @@ MonoBehaviour:
   - {fileID: 1130679458}
   Plane: {fileID: 408606985}
   Crowd: {fileID: 865617215}
+  Traffic: {fileID: 1732967910}
+  Activities: {fileID: 1732967909}
   MapTexture: {fileID: 2800000, guid: dc73485a254674bebb14c9bf1b553cb2, type: 3}
   MapOpen: 0
   Mode: walk
@@ -5191,6 +5198,57 @@ Transform:
   - {fileID: 865617216}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1732967909
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1732967906}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 933c8cf69dd5f4bea9c1b74bd01861a8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Padova.World::Padova.World.Activities
+  Game: {fileID: 1732967907}
+  Traffic: {fileID: 1732967910}
+  BeaconMaterial: {fileID: 2100000, guid: 8f8c0cc4e326e49be8453bbd905f6fd7, type: 2}
+  RaceStart: {x: 330, y: 0, z: 700}
+  RaceFinish: {x: 259, y: 0, z: -898}
+  Money: 0
+  Fares: 0
+  BestRace: 0
+  MenuOpen: 0
+  Kind: 
+  Phase: 
+  Objective: 
+  Clock: 0
+  Limit: 0
+  Fare: 0
+  RouteLength: 0
+  Target: {x: 0, y: 0, z: 0}
+  Checkpoint: 0
+  ImpactsAtStart: 0
+--- !u!114 &1732967910
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1732967906}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86222caa5a1dc4230b7cd1c19e222cf3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Padova.World::Padova.World.CityTraffic
+  Game: {fileID: 1732967907}
+  Count: 34
+  Near: 110
+  Far: 420
+  Active: 0
+  Moving: 0
+  Respawns: 0
+  TotalTravel: 0
 --- !u!1 &1748369396
 GameObject:
   m_ObjectHideFlags: 0

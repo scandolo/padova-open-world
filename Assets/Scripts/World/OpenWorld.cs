@@ -9,6 +9,7 @@ namespace Padova.World
     public sealed class OpenWorld:MonoBehaviour
     {
         public ThirdPersonMotor Player;public WorldContext City;public CityCar[] Cars;public TourPlane Plane;public CityCrowd Crowd;
+        public CityTraffic Traffic;public Activities Activities;public CityTraffic.Vehicle NearbyTraffic{get;private set;}
         public Texture2D MapTexture;public bool MapOpen;public string Mode="walk";
         public CityCar Driving{get;private set;}public CityCar Nearby{get;private set;}
         public bool HasWaypoint;public Vector3 Waypoint;public string DestinationName="";
@@ -58,7 +59,8 @@ namespace Padova.World
                 return;
             }
             Nearby=null;if(Mode=="walk")foreach(var car in Cars)if(Vector3.Distance(car.transform.position,Player.transform.position)<4.5f){Nearby=car;break;}
-            if(interact){if(Mode=="drive")ExitCar();else if(Mode=="walk" && Nearby)EnterCar(Nearby);}
+            NearbyTraffic=Mode=="walk" && !Nearby && Traffic?Traffic.NearestTo(Player.transform.position,4.5f):null;
+            if(interact){if(Mode=="drive")ExitCar();else if(Mode=="walk" && Nearby)EnterCar(Nearby);else if(NearbyTraffic!=null)TakeTrafficCar(NearbyTraffic);}
             if(flight){if(Mode=="fly")EndFlight();else LaunchFlight();}
             if(reset){if(Mode=="drive")Driving.ResetCar();else if(Mode=="fly")EndFlight();}
             if(HasWaypoint && Vector2.Distance(new Vector2(Position.x,Position.z),new Vector2(Waypoint.x,Waypoint.z))<8 && Mode!="fly")
@@ -69,7 +71,7 @@ namespace Padova.World
                 {Visited[i]=true;Discoveries++;Notify("Discovered · "+p.name);}
             }
         }
-        void Notify(string message){Notice=message;noticeUntil=Time.unscaledTime+7;}
+        public void Notify(string message){Notice=message;noticeUntil=Time.unscaledTime+7;}
         public void SetMap(bool open)
         {
             MapOpen=open;Player.ControlsPaused=open;Time.timeScale=open?0:1;
@@ -84,6 +86,19 @@ namespace Padova.World
         {
             if(MapOpen || Mode!="walk" || !car || Vector3.Distance(car.transform.position,Player.transform.position)>5)return;
             returnPoint=Player.transform.position;returnYaw=Player.FollowCamera.Yaw;PlayerActive(false);Driving=car;car.Driven=true;Mode="drive";Notify("Arrow keys drive · Space brake · Return exit");
+        }
+        void TakeTrafficCar(CityTraffic.Vehicle vehicle)
+        {
+            Traffic.Release(vehicle,v=>
+            {
+                var go=new GameObject(v.Colour+" compact");go.transform.SetParent(transform);go.transform.SetPositionAndRotation(v.Go.transform.position,v.Go.transform.rotation);
+                var (mesh,materials)=Traffic.Body(v);var body=new GameObject("Body");body.transform.SetParent(go.transform,false);
+                body.AddComponent<MeshFilter>().sharedMesh=mesh;body.AddComponent<MeshRenderer>().sharedMaterials=materials;
+                var (wheelMesh,wheelMaterials)=Traffic.WheelMesh;
+                var car=CityCar.Equip(go,()=>{var wheel=new GameObject("Wheel");wheel.AddComponent<MeshFilter>().sharedMesh=wheelMesh;wheel.AddComponent<MeshRenderer>().sharedMaterials=wheelMaterials;return wheel.transform;});
+                var cars=new System.Collections.Generic.List<CityCar>(Cars){car};Cars=cars.ToArray();EnterCar(car);
+            });
+            NearbyTraffic=null;
         }
         public bool ExitCar()
         {
@@ -134,7 +149,7 @@ namespace Padova.World
         {var r=MapRect;return new Vector2(r.center.x+(world.x-MapCentre.x)*r.width/MapSpan,r.center.y-(world.z-MapCentre.y)*r.width/MapSpan);}
         public Vector3 MapToWorld(Vector2 point)
         {var r=MapRect;float x=MapCentre.x+(point.x-r.center.x)*MapSpan/r.width,z=MapCentre.y-(point.y-r.center.y)*MapSpan/r.width;return new Vector3(x,City.Data.GroundAt(x,z),z);}
-        public void SetWaypoint(Vector3 point,string name){Waypoint=point;DestinationName=name;HasWaypoint=true;Notify("Waypoint set · "+name);}
+        public void SetWaypoint(Vector3 point,string name,bool notify=true){Waypoint=point;DestinationName=name;HasWaypoint=true;if(notify)Notify("Waypoint set · "+name);}
         static void Panel(Rect r,Color c){var old=GUI.color;GUI.color=c;GUI.DrawTexture(r,Texture2D.whiteTexture);GUI.color=old;}
         void Styles()
         {
@@ -159,6 +174,7 @@ namespace Padova.World
                 if(!MapOpen){var p=Camera.main.WorldToScreenPoint(Waypoint+Vector3.up*4);if(p.z>0){var v=new Vector2(p.x*1600/Screen.width,(Screen.height-p.y)*1000/Screen.height);Dot(v,new Color(1,.7f,.22f),13);}}
             }
             if(Nearby && Mode=="walk"&&!MapOpen){Panel(new Rect(590,770,420,50),ink);GUI.Label(new Rect(610,783,390,30),"RETURN  ·  Drive the "+Nearby.name,body);}
+            if(NearbyTraffic!=null && !MapOpen){Panel(new Rect(590,770,420,50),ink);GUI.Label(new Rect(610,783,390,30),"RETURN  ·  Take the "+NearbyTraffic.Colour+" car",body);}
             Panel(new Rect(26,899,1240,65),ink);
             GUI.Label(new Rect(44,910,1205,26),Mode=="walk"?"Arrow keys move  ·  Shift run  ·  Space jump  ·  Return enter car  ·  M map  ·  F fly":Mode=="drive"?"↑ accelerate  ·  ↓ reverse  ·  ← → steer  ·  Space brake  ·  Return exit  ·  M map  ·  R reset car":"↑ climb  ·  ↓ descend  ·  ← → bank  ·  Shift faster  ·  Space slow  ·  M map  ·  F return to walking",body);
             GUI.Label(new Rect(44,939,1205,22),Mode=="walk"?"Q / E orbit  ·  Click-drag look  ·  C centre camera  ·  Tab toggle run  ·  R return to the market":Mode=="drive"?"Brake to a stop before getting out. R returns this car to its parking position.":"Flight assistance keeps the plane above the skyline. F returns you to your previous walking position.",small);
@@ -172,6 +188,7 @@ namespace Padova.World
             var r=MapRect;float h=MapSpan*r.height/r.width;
             GUI.DrawTextureWithTexCoords(r,MapTexture,new Rect((MapCentre.x-MapSpan/2+1500)/3000,(MapCentre.y-h/2+1300)/2600,MapSpan/3000,h/2600));
             GUI.BeginGroup(r);
+            if(Activities && Activities.Active)foreach(var point in Activities.Route)Dot(WorldToMap(point)-r.position,new Color(.1f,.55f,.7f),5);
             foreach(var car in Cars){var p=WorldToMap(car.transform.position)-r.position;if(p.x>0&&p.y>0&&p.x<r.width&&p.y<r.height){Dot(p,new Color(.14f,.45f,.62f),10);GUI.Label(new Rect(p.x+9,p.y-11,130,24),"Car",label);}}
             var occupied=new System.Collections.Generic.List<Rect>();
             foreach(var place in City.Data.landmarks)

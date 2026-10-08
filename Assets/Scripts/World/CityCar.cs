@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -7,7 +8,7 @@ namespace Padova.World
     public sealed class CityCar:MonoBehaviour
     {
         public WheelCollider[] Wheels;public Transform[] WheelVisuals;public bool Driven,Paused;
-        public Vector3 Home;public Quaternion HomeRotation;public float DistanceTravelled;
+        public Vector3 Home;public Quaternion HomeRotation;public float DistanceTravelled;public int Impacts;
         public float Speed=>Body?Body.linearVelocity.magnitude:0;
         public Rigidbody Body{get;private set;}
         Vector3 lastPosition;
@@ -32,7 +33,25 @@ namespace Padova.World
             DistanceTravelled+=Vector3.Distance(lastPosition,transform.position);lastPosition=transform.position;
             if(transform.position.y< -5 || Mathf.Abs(transform.position.x)>1380 || Mathf.Abs(transform.position.z)>1180)ResetCar();
         }
+        void OnCollisionEnter(Collision collision){if(Driven && collision.gameObject.layer!=8 && collision.relativeVelocity.magnitude>4)Impacts++;}
         void LateUpdate(){for(int i=0;i<Wheels.Length;i++){Wheels[i].GetWorldPose(out var p,out var q);WheelVisuals[i].SetPositionAndRotation(p,q);}}
-        public void ResetCar(){Body.linearVelocity=Vector3.zero;Body.angularVelocity=Vector3.zero;transform.SetPositionAndRotation(Home,HomeRotation);lastPosition=Home;}
+        /// <summary>Rigidbody, collider and WheelCollider suspension shared by parked and commandeered cars.</summary>
+        public static CityCar Equip(GameObject car,Func<Transform> wheelVisual)
+        {
+            car.layer=11;
+            var body=car.AddComponent<Rigidbody>();body.mass=1100;body.interpolation=RigidbodyInterpolation.Interpolate;body.collisionDetectionMode=CollisionDetectionMode.ContinuousDynamic;
+            var box=car.AddComponent<BoxCollider>();box.center=new Vector3(0,.8f,0);box.size=new Vector3(1.74f,1.0f,4.1f);
+            var motor=car.AddComponent<CityCar>();motor.Wheels=new WheelCollider[4];motor.WheelVisuals=new Transform[4];int i=0;
+            foreach(float z in new[]{1.28f,-1.27f})foreach(float x in new[]{-.86f,.86f})
+            {
+                var go=new GameObject("Suspension "+i);go.transform.SetParent(car.transform,false);go.transform.localPosition=new Vector3(x,.50f,z);
+                var wheel=go.AddComponent<WheelCollider>();wheel.radius=.31f;wheel.mass=22;wheel.suspensionDistance=.25f;
+                var spring=wheel.suspensionSpring;spring.spring=32000;spring.damper=4200;spring.targetPosition=.5f;wheel.suspensionSpring=spring;
+                var friction=wheel.sidewaysFriction;friction.stiffness=1.8f;wheel.sidewaysFriction=friction;
+                motor.Wheels[i]=wheel;motor.WheelVisuals[i]=wheelVisual();motor.WheelVisuals[i].SetParent(car.transform,false);motor.WheelVisuals[i].localPosition=new Vector3(x,.32f,z);i++;
+            }
+            return motor;
+        }
+        public void ResetCar(){Body.linearVelocity=Vector3.zero;Body.angularVelocity=Vector3.zero;Body.position=Home;Body.rotation=HomeRotation;transform.SetPositionAndRotation(Home,HomeRotation);lastPosition=Home;}
     }
 }

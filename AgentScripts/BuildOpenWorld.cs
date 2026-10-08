@@ -22,21 +22,31 @@ public static class BuildOpenWorld
     }
     static CityCar Car(string name,Vector3 pos,float yaw,Slot color,Material[] mats,Transform parent)
     {
-        var car=new GameObject(name);car.transform.SetParent(parent);car.layer=11;car.transform.SetPositionAndRotation(pos,Quaternion.Euler(0,yaw,0));
-        var body=car.AddComponent<Rigidbody>();body.mass=1100;body.interpolation=RigidbodyInterpolation.Interpolate;body.collisionDetectionMode=CollisionDetectionMode.ContinuousDynamic;
-        var box=car.AddComponent<BoxCollider>();box.center=new Vector3(0,.8f,0);box.size=new Vector3(1.74f,1.0f,4.1f);
+        var car=new GameObject(name);car.transform.SetParent(parent);car.transform.SetPositionAndRotation(pos,Quaternion.Euler(0,yaw,0));
         var sink=new MeshSink();WorldShapes.CarBody(sink,color);MeshObject(name+" body",sink,mats,car.transform);
-        var motor=car.AddComponent<CityCar>();motor.Wheels=new WheelCollider[4];motor.WheelVisuals=new Transform[4];
-        var wheelSink=new MeshSink();WorldShapes.Wheel(wheelSink);int i=0;
-        foreach(float z in new[]{1.28f,-1.27f})foreach(float x in new[]{-.86f,.86f})
-        {
-            var go=new GameObject("Suspension "+i);go.transform.SetParent(car.transform,false);go.transform.localPosition=new Vector3(x,.50f,z);
-            var wheel=go.AddComponent<WheelCollider>();wheel.radius=.31f;wheel.mass=22;wheel.suspensionDistance=.25f;
-            var spring=wheel.suspensionSpring;spring.spring=32000;spring.damper=4200;spring.targetPosition=.5f;wheel.suspensionSpring=spring;
-            var friction=wheel.sidewaysFriction;friction.stiffness=1.8f;wheel.sidewaysFriction=friction;
-            motor.Wheels[i]=wheel;motor.WheelVisuals[i]=MeshObject("Wheel",wheelSink,mats,car.transform).transform;motor.WheelVisuals[i].localPosition=new Vector3(x,.32f,z);i++;
-        }
+        var wheelSink=new MeshSink();WorldShapes.Wheel(wheelSink);
+        var motor=CityCar.Equip(car,()=>MeshObject("Wheel",wheelSink,mats,car.transform).transform);
         return motor;
+    }
+    static void AttachActivities(OpenWorld game)
+    {
+        game.Traffic=game.GetComponent<CityTraffic>()??game.gameObject.AddComponent<CityTraffic>();game.Traffic.Game=game;
+        game.Activities=game.GetComponent<Activities>()??game.gameObject.AddComponent<Activities>();game.Activities.Game=game;game.Activities.Traffic=game.Traffic;
+        string beaconPath=Folder+"/Beacon.mat";var beacon=AssetDatabase.LoadAssetAtPath<Material>(beaconPath);
+        if(!beacon){beacon=new Material(Shader.Find("Universal Render Pipeline/Unlit"));AssetDatabase.CreateAsset(beacon,beaconPath);}
+        beacon.SetFloat("_Surface",1);beacon.SetFloat("_SrcBlend",(float)UnityEngine.Rendering.BlendMode.SrcAlpha);beacon.SetFloat("_DstBlend",(float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        beacon.SetFloat("_ZWrite",0);beacon.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");beacon.SetOverrideTag("RenderType","Transparent");beacon.renderQueue=3000;
+        EditorUtility.SetDirty(beacon);game.Activities.BeaconMaterial=beacon;
+        game.Crowd.Count=64;
+    }
+    // Connect gameplay without regenerating existing architecture, navigation or vehicle assets.
+    public static object Gameplay()
+    {
+        if(EditorApplication.isPlaying)throw new InvalidOperationException("Stop Play Mode first.");
+        var scene=EditorSceneManager.OpenScene("Assets/Scenes/PadovaPlayable.unity",OpenSceneMode.Single);
+        var game=UnityEngine.Object.FindFirstObjectByType<OpenWorld>();AttachActivities(game);
+        EditorUtility.SetDirty(game);EditorUtility.SetDirty(game.Crowd);AssetDatabase.SaveAssets();EditorSceneManager.MarkSceneDirty(scene);EditorSceneManager.SaveScene(scene);
+        return new{traffic=game.Traffic.Count,pedestrians=game.Crowd.Count,activities=game.Activities!=null};
     }
     public static object Build()
     {
@@ -69,6 +79,7 @@ public static class BuildOpenWorld
         }
         crowd.Skins=skins.ToArray();
         crowd.Destinations=new[]{P(80,10),P(112,0),P(32,9),P(26,-86),P(90,-95),P(120,-71),P(-60,10),P(-97,15),P(-65,70),P(-165,-112),P(189,-57),P(195,-106)};
+        AttachActivities(game);
         Physics.SyncTransforms();
         var sources=new List<NavMeshBuildSource>();
         var bounds=new Bounds(new Vector3(0,10,-20),new Vector3(680,100,540));
