@@ -55,7 +55,7 @@ Blender UVs are metric like MeshSink, but shifted per face by whole 8.8 m period
 
 - Ordinary façades, roof shapes and much landmark ornament are typology, not measured elevations. Other landmarks, including Palazzo Moroni and the Gran Guardia, still have generic treatments.
 - The detailed core and lower-detail surroundings differ in façade detail. The finite map has boundaries; it is not all of Padova.
-- Pedestrians walk central routes. Cars are drivable, without autonomous traffic; no interiors or mission system beyond place discovery.
+- Pedestrians walk central routes. Cars are drivable, with authored AI lanes on surveyed centrelines, taxi fares and a checkpoint sprint. Traffic rules and lane offsets are gameplay assumptions; interiors remain absent.
 - Ground is interpolated, and waterways are visual context. There is no hydrology or water-driving simulation.
 - Flight starts airborne with assistance; there is no runway, landing or flight-simulator model.
 - The M4 Air performance target still needs a representative 20-minute measurement.

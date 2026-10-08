@@ -23,6 +23,7 @@ def delta(a,b):return math.dist(a['position'],b['position'])
 def reset():
     v.call('world_fixture','--name','reset');return until(lambda s:s['mode']=='walk' and s['playerEnabled'])
 def run_case(name):
+    if name in ['traffic','taxi','race']:return activity_case(name)
     if name not in ['map','car','flight','crowd','quiet_flight','santo','prato','landmarks']:return original(name)
     reset()
     if name=='quiet_flight':
@@ -122,9 +123,71 @@ def run_case(name):
         assert end['worldBuildings']>19000,end
         return {'count':end['npcs'],'moving':end['npcsMoved'],'distanceMetres':end['npcTravel'],'invalidNavigation':end['invalidNav']}
 
+def enter_car():
+    v.call('world_fixture','--name','car');until(lambda s:s['nearby']!='')
+    v.press('Enter');return until(lambda s:s['mode']=='drive')
+
+def choose(key):
+    v.press('J');until(lambda s:s['menu']);v.press(key)
+
+def activity_case(name):
+    reset();v.call('activity_fixture','--name','save')
+    try:
+        if name=='traffic':
+            start=until(lambda s:s['trafficMoving']>5)
+            moving=until(lambda s:s['trafficTravel']>start['trafficTravel']+20)
+            assert moving['traffic']>20,moving
+            v.press('M');paused=until(lambda s:s['mapOpen']);time.sleep(.4)
+            assert abs(state()['trafficTravel']-paused['trafficTravel'])<.01
+            v.press('M');until(lambda s:not s['mapOpen'])
+            v.call('activity_fixture','--name','traffic');near=until(lambda s:s['nearbyTraffic'],20)
+            v.press('Enter');taken=until(lambda s:s['mode']=='drive')
+            assert taken['cars']==near['cars']+1 and taken['traffic']==near['traffic'],taken
+            time.sleep(2);screenshot=v.capture('world/traffic-native.png')
+            return {'count':moving['traffic'],'moving':moving['trafficMoving'],'travelMetres':moving['trafficTravel']-start['trafficTravel'],'takeover':True,'mapPausesTraffic':True,'screenshot':screenshot}
+        if name=='taxi':
+            choose('Digit1');until(lambda s:not s['menu']);assert state()['activity']=='' # Cannot start on foot.
+            start=enter_car();choose('Digit1');pickup=until(lambda s:s['phase']=='pickup')
+            v.press('M');paused=until(lambda s:s['mapOpen']);time.sleep(.3)
+            assert abs(state()['clock']-paused['clock'])<.01
+            route_screen=v.capture('world/taxi-map-native.png');v.press('M')
+            # Set up the last metres, then drive using real input; game logic performs pickup.
+            v.call('activity_fixture','--name','target','--distance',12);time.sleep(.3)
+            assert state()['phase']=='pickup'
+            v.down('UpArrow')
+            try:until(lambda s:s['carSpeed']>2,8)
+            finally:v.up('UpArrow')
+            until(lambda s:s['phase']=='dropoff' or math.dist(s['position'],s['target'])<9,8)
+            v.down('Space')
+            try:onboard=until(lambda s:s['phase']=='dropoff')
+            finally:v.up('Space')
+            assert onboard['money']==start['money'] and onboard['fare']>4,onboard
+            v.call('activity_fixture','--name','target');paid=until(lambda s:s['fares']==1)
+            assert paid['money']>start['money'] and paid['savedMoney']==paid['money'],paid
+            screenshot=v.capture('world/taxi-native.png')
+            choose('Digit0');ended=until(lambda s:s['activity']=='')
+            time.sleep(.3);assert state()['money']==paid['money'],'Duplicate payout after cancelling'
+            v.press('R');until(lambda s:math.dist(s['position'],start['position'])<1)
+            time.sleep(.3);assert math.dist(state()['position'],start['position'])<1,'Physics undid the car reset'
+            return {'paidEuros':paid['money']-start['money'],'fareMetres':onboard['routeLength'],'savedWallet':True,'onFootRejected':True,'mapPausesTimer':True,'cancelled':True,'screenshot':screenshot,'mapScreenshot':route_screen,'fixture':'Position setup for pickup approach and drop-off; actual input drives pickup approach.'}
+        start=enter_car();choose('Digit2');until(lambda s:s['phase']=='start')
+        v.call('activity_fixture','--name','target');countdown=until(lambda s:s['phase']=='countdown')
+        assert countdown['money']==start['money']
+        racing=until(lambda s:s['phase']=='racing');count=racing['checkpoints']
+        assert count>10,racing
+        for i in range(count):
+            v.call('activity_fixture','--name','checkpoint')
+            until(lambda s:s['checkpoint']==i+1)
+        finished=until(lambda s:s['activity']=='')
+        assert finished['money']>start['money'] and finished['bestRace']>0,finished
+        wallet=finished['money'];time.sleep(.3);assert state()['money']==wallet
+        screenshot=v.capture('world/race-native.png')
+        return {'checkpoints':count,'rewardEuros':wallet-start['money'],'bestSeconds':finished['bestRace'],'singlePayout':True,'screenshot':screenshot,'fixture':'Position setup at each checkpoint; verifies order, countdown, completion and reward, not a full driven route.'}
+    finally:v.call('activity_fixture','--name','restore')
+
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,traffic,taxi,race,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True

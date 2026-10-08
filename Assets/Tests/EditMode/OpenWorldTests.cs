@@ -51,6 +51,16 @@ namespace PadovaOpenWorld.Tests
             Assert.That(back.x,Is.EqualTo(position.x).Within(.001f));Assert.That(back.z,Is.EqualTo(position.z).Within(.001f));
             Assert.That(game.WorldToMap(Vector3.forward*500).y,Is.LessThan(game.WorldToMap(Vector3.zero).y));
         }
+        [Test]public void ActivitiesHaveConnectedSurveyedRouteAndSceneReferences()
+        {
+            Assert.That(game.Traffic.Game,Is.EqualTo(game));Assert.That(game.Activities.Game,Is.EqualTo(game));
+            Assert.That(game.Activities.Traffic,Is.EqualTo(game.Traffic));Assert.That(game.Activities.BeaconMaterial,Is.Not.Null);
+            Assert.That(game.Crowd.Count,Is.EqualTo(64));
+            var net=RoadNetwork.Build(game.City.Data.roads,game.City.Data.GroundAt);
+            var route=net.Route(net.NearestNode(game.Activities.RaceStart),net.NearestNode(game.Activities.RaceFinish));
+            Assert.That(net.Lanes.Count,Is.GreaterThan(1200));Assert.That(route,Is.Not.Empty);
+            Assert.That(net.Length(route),Is.InRange(1500,3000));Assert.That(net.Along(route,140).Count,Is.GreaterThan(10));
+        }
         [Test]public void LandmarkDetailsAndMarketAreModelledGeometry()
         {
             var city=game.City.City;var landmark=city.transform.Find("Generated city/Clock, Capitanio, Duomo and Bo");

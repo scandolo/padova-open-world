@@ -1,5 +1,6 @@
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
 using System;
+using System.Linq;
 using Unity.Pipeline.Commands;
 using UnityEngine;
 using UnityEngine.AI;
@@ -17,10 +18,53 @@ namespace Padova.World
             int invalid=0;foreach(var a in g.Crowd.GetComponentsInChildren<NavMeshAgent>())if(!a.isOnNavMesh)invalid++;
             return new{ready=true,mode=g.Mode,mapOpen=g.MapOpen,position=XYZ(g.Position),player=XYZ(g.Player.transform.position),frame=Time.frameCount,focused=Application.isFocused,
                 g.HasWaypoint,waypoint=XYZ(g.Waypoint),mapCentre=new[]{g.MapCentre.x,g.MapCentre.y},mapSpan=g.MapSpan,screenWidth=Screen.width,screenHeight=Screen.height,
+                traffic=g.Traffic.Active,trafficMoving=g.Traffic.Moving,trafficTravel=g.Traffic.TotalTravel,trafficRespawns=g.Traffic.Respawns,
+                trafficCars=g.Traffic.Vehicles.Where(v=>v.Go.activeSelf).Select(v=>new{position=XYZ(v.Go.transform.position),v.Lane,v.S,v.Speed}).ToArray(),
+                activity=g.Activities.Kind,phase=g.Activities.Phase,menu=g.Activities.MenuOpen,money=g.Activities.Money,savedMoney=PlayerPrefs.GetInt("padova.money",0),
+                fares=g.Activities.Fares,clock=g.Activities.Clock,limit=g.Activities.Limit,fare=g.Activities.Fare,target=XYZ(g.Activities.Target),
+                checkpoint=g.Activities.Checkpoint,checkpoints=g.Activities.Checkpoints.Count,bestRace=g.Activities.BestRace,routeLength=g.Activities.RouteLength,
+                nearbyTraffic=g.NearbyTraffic!=null,notice=g.Notice,
                 cars=g.Cars.Length,nearby=g.Nearby?g.Nearby.name:"",carPosition=XYZ(g.Cars[0].transform.position),carSpeed=g.Driving?g.Driving.Speed:0,
                 carTravel=g.Cars[0].DistanceTravelled,carHeading=g.Cars[0].transform.eulerAngles.y,planeSpeed=g.Plane.Speed,altitude=g.Plane.Altitude,planeHeading=g.Plane.transform.eulerAngles.y,
                 planeTravel=g.Plane.DistanceTravelled,npcs=g.Crowd.ActiveCount,npcsMoved=g.Crowd.MovedCount,npcTravel=g.Crowd.TotalTravel,invalidNav=invalid,
                 worldBuildings=g.City.Buildings,g.Discoveries,playerEnabled=g.Player.enabled,colliderEnabled=g.Player.GetComponent<CharacterController>().enabled};
+        }
+        static int savedMoney;static float savedBest;static bool hadMoney,hadBest,prefsSaved;
+        [CliCommand("activity_fixture","Development-only setup for traffic and activity state-transition scenarios; does not complete objectives.")]
+        public static object ActivityFixture([CliArg("name","save | restore | target | checkpoint | traffic",Required=true)]string name,
+            [CliArg("distance","Metres before activity target")]float distance=0)
+        {
+            var g=Game;var a=g.Activities;
+            if(name=="save")
+            {
+                hadMoney=PlayerPrefs.HasKey("padova.money");hadBest=PlayerPrefs.HasKey("padova.race.best");
+                savedMoney=PlayerPrefs.GetInt("padova.money",0);savedBest=PlayerPrefs.GetFloat("padova.race.best",0);prefsSaved=true;
+            }
+            else if(name=="restore")
+            {
+                if(!prefsSaved)throw new InvalidOperationException("Save fixture first");a.End("");a.MenuOpen=false;
+                if(hadMoney)PlayerPrefs.SetInt("padova.money",savedMoney);else PlayerPrefs.DeleteKey("padova.money");
+                if(hadBest)PlayerPrefs.SetFloat("padova.race.best",savedBest);else PlayerPrefs.DeleteKey("padova.race.best");
+                PlayerPrefs.Save();a.Money=savedMoney;a.BestRace=savedBest;prefsSaved=false;
+            }
+            else if(name=="traffic")
+            {
+                Fixture("reset");var v=g.Traffic.Vehicles.First(v=>v.Go.activeSelf);var p=v.Go.transform.position+v.Go.transform.forward*5;
+                var c=g.Player.GetComponent<CharacterController>();c.enabled=false;g.Player.transform.position=p;c.enabled=true;g.Player.FollowCamera.SetTestHeading(v.Go.transform.eulerAngles.y);
+            }
+            else if(name=="target" || name=="checkpoint")
+            {
+                if(!g.Driving)throw new InvalidOperationException("Enter a car first");
+                var target=name=="checkpoint"?a.Checkpoints[a.Checkpoint]:a.Target;
+                var (lane,s,_)=g.Traffic.Network.Nearest(target);g.Traffic.Network.Sample(lane,s,out var tangent);
+                var p=target-tangent.WithY(0).normalized*distance;
+                p.y=g.City.Data.GroundAt(p.x,p.z)+.25f;
+                if(Physics.Raycast(p+Vector3.up*30,Vector3.down,out var hit,60,1<<8))p.y=hit.point.y+.25f;
+                var car=g.Driving;car.Body.linearVelocity=Vector3.zero;car.Body.angularVelocity=Vector3.zero;
+                car.Body.position=p;car.Body.rotation=Quaternion.LookRotation(tangent.WithY(0));car.transform.SetPositionAndRotation(p,car.Body.rotation);Physics.SyncTransforms();
+            }
+            else throw new ArgumentException(name);
+            return Read();
         }
         [CliCommand("world_fixture","Place the walking character beside a car, at a mapped point, or reset the exploration state for repeatable input tests.")]
         public static object Fixture([CliArg("name","car | reset | at",Required=true)]string name,
