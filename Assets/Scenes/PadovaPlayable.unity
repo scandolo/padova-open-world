@@ -1094,7 +1094,7 @@ MonoBehaviour:
   CollisionDistance: 330
   Buildings: 19325
   Chunks: 347
-  BuildMilliseconds: 1324.1602
+  BuildMilliseconds: 4696.9976
 --- !u!4 &571351337
 Transform:
   m_ObjectHideFlags: 0
@@ -3752,7 +3752,7 @@ MonoBehaviour:
   Vertices: 3156517
   Triangles: 1533557
   Chunks: 43
-  BuildMilliseconds: 534.4044
+  BuildMilliseconds: 2202.018
 --- !u!4 &1117771737
 Transform:
   m_ObjectHideFlags: 0
@@ -3815,6 +3815,13 @@ MonoBehaviour:
   HomeRotation: {x: 0, y: 0, z: 0, w: 0}
   DistanceTravelled: 0
   Impacts: 0
+  TrafficHits: 0
+  Boost: 1
+  Autopilot: 0
+  AutoThrottle: 0
+  AutoSteer: 0
+  TopSpeed: 22
+  AutoBrake: 0
 --- !u!4 &1130679459
 Transform:
   m_ObjectHideFlags: 0
@@ -4131,6 +4138,13 @@ MonoBehaviour:
   HomeRotation: {x: 0, y: 0, z: 0, w: 0}
   DistanceTravelled: 0
   Impacts: 0
+  TrafficHits: 0
+  Boost: 1
+  Autopilot: 0
+  AutoThrottle: 0
+  AutoSteer: 0
+  TopSpeed: 22
+  AutoBrake: 0
 --- !u!4 &1185353049
 Transform:
   m_ObjectHideFlags: 0
@@ -4523,6 +4537,13 @@ MonoBehaviour:
   HomeRotation: {x: 0, y: 0, z: 0, w: 0}
   DistanceTravelled: 0
   Impacts: 0
+  TrafficHits: 0
+  Boost: 1
+  Autopilot: 0
+  AutoThrottle: 0
+  AutoSteer: 0
+  TopSpeed: 22
+  AutoBrake: 0
 --- !u!4 &1473735911
 Transform:
   m_ObjectHideFlags: 0
@@ -5138,6 +5159,7 @@ GameObject:
   - component: {fileID: 1732967907}
   - component: {fileID: 1732967910}
   - component: {fileID: 1732967909}
+  - component: {fileID: 1732967911}
   m_Layer: 0
   m_Name: Open world
   m_TagString: Untagged
@@ -5167,6 +5189,7 @@ MonoBehaviour:
   Crowd: {fileID: 865617215}
   Traffic: {fileID: 1732967910}
   Activities: {fileID: 1732967909}
+  Police: {fileID: 1732967911}
   MapTexture: {fileID: 2800000, guid: dc73485a254674bebb14c9bf1b553cb2, type: 3}
   MapOpen: 0
   Mode: walk
@@ -5249,6 +5272,28 @@ MonoBehaviour:
   Moving: 0
   Respawns: 0
   TotalTravel: 0
+--- !u!114 &1732967911
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1732967906}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 76c6be7ddb3a7416984298790be89066, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Padova.World::Padova.World.Police
+  Game: {fileID: 1732967907}
+  Traffic: {fileID: 1732967910}
+  Activities: {fileID: 1732967909}
+  LightMaterial: {fileID: 2100000, guid: 8f8c0cc4e326e49be8453bbd905f6fd7, type: 2}
+  Wanted: 0
+  Busts: 0
+  Escapes: 0
+  Spawned: 0
+  Evade: 0
+  BustTimer: 0
 --- !u!1 &1748369396
 GameObject:
   m_ObjectHideFlags: 0

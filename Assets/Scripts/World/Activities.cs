@@ -65,12 +65,12 @@ namespace Padova.World
         // Pick-up somewhere 150–450 m away by road, beside the kerb on the right of the lane.
         void NextFare()
         {
-            var here=Net.NearestNode(Game.Position);int pick=-1;
+            int pick=-1;
             for(int i=0;i<60 && pick<0;i++)
             {
-                int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<30)continue;
+                int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<30||!Net.Open(lane))continue;
                 float d=Vector3.Distance(Net.Nodes[l.From],Game.Position);if(d<150||d>450)continue;
-                if(Net.Route(here,l.From).Count==0)continue;pick=lane;
+                if(Net.DriveRoute(Game.Position,Net.Nodes[l.From]).Count==0)continue;pick=lane;
             }
             if(pick<0){End("No fares nearby. Try again closer to the centre.");return;}
             float s=Net.Lanes[pick].Length*.5f;var p=Net.Sample(pick,s,out var tangent);
@@ -101,7 +101,7 @@ namespace Padova.World
                     Vector3 drop;string name;
                     if(choices.Count>0){var place=choices[random.Next(choices.Count)];drop=new Vector3(place.x,0,place.z);name=place.name;}
                     else{drop=Game.Position+Quaternion.Euler(0,random.Next(360),0)*Vector3.forward*700;name="";}
-                    var (lane,s,_)=Net.Nearest(drop);Target=Net.Sample(lane,s,out _);if(name=="")name=Net.Lanes[lane].Name;
+                    var (lane,s,_)=Net.Nearest(drop,true);Target=Net.Sample(lane,s,out _);if(name=="")name=Net.Lanes[lane].Name;
                     PlanRoute(Target);if(Route.Count==0){End("The passenger's destination is unreachable by road.");return;}
                     Phase="dropoff";Clock=0;Limit=Mathf.Round(RouteLength/7.5f+25);Fare=Mathf.Round(4+RouteLength*.012f);ImpactsAtStart=car.Impacts;
                     Objective="Drive to "+name;Game.SetWaypoint(Target,"Taxi drop-off · "+name);Game.Notify("Passenger on board · "+name+" · "+Mathf.RoundToInt(RouteLength)+" m · "+Limit+" s");
@@ -123,10 +123,10 @@ namespace Padova.World
         public void StartRace()
         {
             if(Net==null)return;if(Active)End("");if(!InCar("The sprint"))return;
-            int start=Net.NearestNode(RaceStart),finish=Net.NearestNode(RaceFinish);var lanes=Net.Route(start,finish);
+            var lanes=Net.DriveRoute(RaceStart,RaceFinish);
             if(lanes.Count==0){Game.Notify("Race route unavailable.");return;}
             Checkpoints.Clear();Checkpoints.AddRange(Net.Along(lanes,140));RouteLength=Net.Length(lanes);
-            Kind="race";Phase="start";Target=Net.Nodes[start];Checkpoint=0;Clock=0;Limit=0;Objective="Drive to the start on "+Net.Lanes[lanes[0]].Name;
+            Kind="race";Phase="start";Target=Net.Nodes[Net.Lanes[lanes[0]].From];Checkpoint=0;Clock=0;Limit=0;Objective="Drive to the start on "+Net.Lanes[lanes[0]].Name;
             Game.SetWaypoint(Target,"Sprint start · Corso Garibaldi");PlanRoute(Target);
         }
         void UpdateRace()
@@ -166,9 +166,10 @@ namespace Padova.World
         }
         void PlanRoute(Vector3 to)
         {
-            Route.Clear();RouteLength=0;var lanes=Net.Route(Net.NearestNode(Game.Position),Net.NearestNode(to));
+            Route.Clear();RouteLength=0;var lanes=Net.DriveRoute(Game.Position,to);
             Route.AddRange(Net.Along(lanes,25));RouteLength=Net.Length(lanes);
         }
+        public void Charge(int amount){Pay(-Mathf.Min(amount,Money));}
         void Pay(int amount){Money+=amount;PlayerPrefs.SetInt("padova.money",Money);PlayerPrefs.Save();}
         void Result(string message){Game.Notify(message);}
         void HideBeacons(){beacon.gameObject.SetActive(false);nextBeacon.gameObject.SetActive(false);}

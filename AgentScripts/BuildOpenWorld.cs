@@ -37,6 +37,7 @@ public static class BuildOpenWorld
         beacon.SetFloat("_Surface",1);beacon.SetFloat("_SrcBlend",(float)UnityEngine.Rendering.BlendMode.SrcAlpha);beacon.SetFloat("_DstBlend",(float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         beacon.SetFloat("_ZWrite",0);beacon.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");beacon.SetOverrideTag("RenderType","Transparent");beacon.renderQueue=3000;
         EditorUtility.SetDirty(beacon);game.Activities.BeaconMaterial=beacon;
+        game.Police=game.GetComponent<Police>()??game.gameObject.AddComponent<Police>();game.Police.Game=game;game.Police.Traffic=game.Traffic;game.Police.Activities=game.Activities;game.Police.LightMaterial=beacon;
         game.Crowd.Count=64;
     }
     // Connect gameplay without regenerating existing architecture, navigation or vehicle assets.
@@ -46,7 +47,7 @@ public static class BuildOpenWorld
         var scene=EditorSceneManager.OpenScene("Assets/Scenes/PadovaPlayable.unity",OpenSceneMode.Single);
         var game=UnityEngine.Object.FindFirstObjectByType<OpenWorld>();AttachActivities(game);
         EditorUtility.SetDirty(game);EditorUtility.SetDirty(game.Crowd);AssetDatabase.SaveAssets();EditorSceneManager.MarkSceneDirty(scene);EditorSceneManager.SaveScene(scene);
-        return new{traffic=game.Traffic.Count,pedestrians=game.Crowd.Count,activities=game.Activities!=null};
+        return new{traffic=game.Traffic.Count,pedestrians=game.Crowd.Count,activities=game.Activities!=null,police=game.Police!=null};
     }
     public static object Build()
     {

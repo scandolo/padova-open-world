@@ -29,6 +29,15 @@ namespace PadovaOpenWorld.Tests
             Assert.That(Vector3.Distance(points[points.Count-1],new Vector3(40,0,40)),Is.LessThan(.01f));
             Assert.That(net.Route(0,net.NearestNode(new Vector3(300,0,0))),Is.Empty);
         }
+        [Test]public void ClosedLanesAreAvoidedButRoutesFallBackWhenDisconnected()
+        {
+            // A junction at (0,40) continues east or north; closing the east lane forces traffic north.
+            var net=RoadNetwork.Build(new[]{Road(0,0,0,40),Road(0,40,40,40),Road(0,40,0,80)},(x,z)=>0);var random=new System.Random(3);
+            net.Closed=new bool[net.Lanes.Count];net.Closed[2]=true;
+            for(int i=0;i<20;i++)Assert.That(net.Next(0,random),Is.EqualTo(4));
+            Assert.That(net.DriveRoute(Vector3.zero,new Vector3(0,0,80)).Count,Is.EqualTo(2));
+            var fallback=net.DriveRoute(Vector3.zero,new Vector3(40,0,40));Assert.That(fallback.Count,Is.EqualTo(2));Assert.That(fallback[1],Is.EqualTo(2));
+        }
         [Test]public void TrafficContinuesThroughJunctionAndTurnsBackAtDeadEnd()
         {
             var net=RoadNetwork.Build(new[]{Road(0,0,0,40),Road(0,40,40,40)},(x,z)=>0);var random=new System.Random(1);

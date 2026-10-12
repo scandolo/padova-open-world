@@ -10,7 +10,7 @@ namespace Padova.World
     {
         public OpenWorld Game;public int Count=34;public float Near=110,Far=420;
         public RoadNetwork Network{get;private set;}
-        public int Active,Moving,Respawns;public float TotalTravel;
+        public int Active,Moving,Respawns,ClosedLanes;public float TotalTravel;
         public sealed class Vehicle{public GameObject Go;public Rigidbody Body;public Transform[] Wheels;public int Lane,Index;public float S,Speed,Cruise,Blocked,GhostUntil,Spin;public string Colour;}
         public readonly List<Vehicle> Vehicles=new();
         readonly System.Random random=new(1222);Mesh wheelMesh;Material[] wheelMaterials;readonly List<(Mesh mesh,Material[] materials,string name)> bodies=new();float nextRecycle;
@@ -24,7 +24,7 @@ namespace Padova.World
         void Start()
         {
             if(!Game || Game.City.Data==null)return;
-            Network=RoadNetwork.Build(Game.City.Data.roads,Ground);
+            Network=RoadNetwork.Build(Game.City.Data.roads,Ground);CloseObstructedLanes();
             var palette=Game.City.City.Materials;
             var wheels=new MeshSink();WorldShapes.Wheel(wheels);wheelMesh=wheels.ToMesh("Traffic wheel",palette,out wheelMaterials);
             foreach(var (name,color) in Paints)
@@ -58,7 +58,7 @@ namespace Padova.World
             var focus=Game.Position;var camera=Camera.main;
             for(int attempt=0;attempt<400;attempt++)
             {
-                int lane=random.Next(Network.Lanes.Count);var l=Network.Lanes[lane];if(l.Length<20)continue;
+                int lane=random.Next(Network.Lanes.Count);var l=Network.Lanes[lane];if(l.Length<20||!Network.Open(lane))continue;
                 float s=(float)random.NextDouble()*(l.Length-10)+5;var p=Network.Sample(lane,s,out var tangent);
                 float d=Vector2.Distance(new Vector2(p.x,p.z),new Vector2(focus.x,focus.z));
                 if(d>Far*.9f || d<(initial?25:Near))continue;
@@ -92,10 +92,16 @@ namespace Padova.World
                 // Stop for the player, the player's car and other traffic in the lane ahead.
                 float look=4+v.Speed*1.6f;bool blocked=false;RaycastHit hit=default;
                 if(Physics.BoxCast(t.position+Vector3.up*.8f+t.forward*2.3f,new Vector3(.7f,.45f,.2f),t.forward,out hit,t.rotation,look,mask,QueryTriggerInteraction.Ignore))
-                {blocked=hit.collider.attachedRigidbody!=v.Body && !(Time.time<v.GhostUntil && hit.rigidbody && hit.rigidbody.isKinematic && hit.collider.gameObject.layer==11);if(blocked)limit=Mathf.Min(limit,Mathf.Max(0,(hit.distance-1.5f)*.8f));}
-                // Cars wait for a person on foot indefinitely. Two cars meeting head-on at a junction centre pass after a pause.
-                v.Blocked=blocked&&v.Speed<.3f&&hit.rigidbody && hit.rigidbody.isKinematic && hit.collider.gameObject.layer==11?v.Blocked+dt:0;
-                if(v.Blocked>5){v.GhostUntil=Time.time+2.5f;v.Blocked=0;}
+                {blocked=hit.collider.attachedRigidbody!=v.Body && !(Time.time<v.GhostUntil && hit.collider.gameObject.layer==11);if(blocked)limit=Mathf.Min(limit,Mathf.Max(0,(hit.distance-1.5f)*.8f));}
+                // A cast starting inside another car misses it, so also check the space just ahead of the bumper.
+                bool overlapPerson=false;
+                if(!blocked && Time.time>v.GhostUntil)foreach(var c in Physics.OverlapBox(t.position+Vector3.up*.8f+t.forward*3,new Vector3(.75f,.45f,.9f),t.rotation,(1<<10)|(1<<11),QueryTriggerInteraction.Ignore))
+                    if(c.attachedRigidbody!=v.Body){blocked=true;limit=0;hit=default;overlapPerson=c.gameObject.layer==10;break;}
+                // Cars wait for a person on foot indefinitely. Another car (head-on at a junction, or parked in the lane) is passed after a pause;
+                // a car stuck on anything else is moved somewhere out of view.
+                bool person=blocked && (overlapPerson || hit.collider && hit.collider.gameObject.layer==10);
+                v.Blocked=blocked&&v.Speed<.3f&&!person?v.Blocked+dt:0;
+                if(v.Blocked>5){v.Blocked=0;bool car=!hit.collider||hit.collider.gameObject.layer==11;if(car)v.GhostUntil=Time.time+3;else if(Place(v,false))Respawns++;}
                 v.Speed=Mathf.MoveTowards(v.Speed,limit,(limit<v.Speed?7f:2.4f)*dt);
                 v.S+=v.Speed*dt;
                 while(v.S>Network.Lanes[v.Lane].Length){v.S-=Network.Lanes[v.Lane].Length;int next=PeekNext(v);planned.Remove(v);v.Lane=next;}
@@ -114,6 +120,23 @@ namespace Padova.World
                     if(Vector2.Distance(new Vector2(p.x,p.z),new Vector2(focus.x,focus.z))>Far && Place(v,false))Respawns++;
                 }
             }
+        }
+        /// <summary>Surveyed centrelines pass through porticoes and narrow historic streets; traffic avoids lanes a car body would intersect.</summary>
+        void CloseObstructedLanes()
+        {
+            var colliders=new List<Collider>();
+            foreach(var c in FindObjectsByType<Collider>(FindObjectsInactive.Exclude,FindObjectsSortMode.None))if(c.gameObject.layer==9 && !c.enabled){c.enabled=true;colliders.Add(c);}
+            Physics.SyncTransforms();Network.Closed=new bool[Network.Lanes.Count];ClosedLanes=0;
+            for(int i=0;i<Network.Lanes.Count;i++)
+            {
+                var l=Network.Lanes[i];
+                for(float s=4;s<l.Length-4 && !Network.Closed[i];s+=4)
+                {
+                    var p=Network.Sample(i,s,out var tangent);if(tangent.WithY(0).sqrMagnitude<.001f)continue;
+                    if(Physics.CheckBox(p+Vector3.up*.9f,new Vector3(.85f,.45f,1),Quaternion.LookRotation(tangent.WithY(0)),1<<9,QueryTriggerInteraction.Ignore)){Network.Closed[i]=true;ClosedLanes++;}
+                }
+            }
+            foreach(var c in colliders)c.enabled=false;
         }
         void LateUpdate(){foreach(var v in Vehicles)foreach(var w in v.Wheels)w.localRotation=Quaternion.Euler(v.Spin,0,0);}
         /// <summary>Removes a traffic car so the player can take it over; another car appears out of view later.</summary>

@@ -24,6 +24,8 @@ namespace Padova.World
                 fares=g.Activities.Fares,clock=g.Activities.Clock,limit=g.Activities.Limit,fare=g.Activities.Fare,target=XYZ(g.Activities.Target),
                 checkpoint=g.Activities.Checkpoint,checkpoints=g.Activities.Checkpoints.Count,bestRace=g.Activities.BestRace,routeLength=g.Activities.RouteLength,
                 nearbyTraffic=g.NearbyTraffic!=null,notice=g.Notice,
+                wanted=g.Police.Wanted,police=g.Police.Units.Count,policeNearest=g.Police.Nearest<9999?g.Police.Nearest:-1,evade=g.Police.Evade,bustTimer=g.Police.BustTimer,busts=g.Police.Busts,escapes=g.Police.Escapes,
+                policeMoving=g.Police.Units.Count(u=>u.Car.Speed>2),boost=g.Driving?g.Driving.Boost:1,boosting=g.Driving&&g.Driving.Boosting,trafficHits=g.Driving?g.Driving.TrafficHits:0,
                 cars=g.Cars.Length,nearby=g.Nearby?g.Nearby.name:"",carPosition=XYZ(g.Cars[0].transform.position),carSpeed=g.Driving?g.Driving.Speed:0,
                 carTravel=g.Cars[0].DistanceTravelled,carHeading=g.Cars[0].transform.eulerAngles.y,planeSpeed=g.Plane.Speed,altitude=g.Plane.Altitude,planeHeading=g.Plane.transform.eulerAngles.y,
                 planeTravel=g.Plane.DistanceTravelled,npcs=g.Crowd.ActiveCount,npcsMoved=g.Crowd.MovedCount,npcTravel=g.Crowd.TotalTravel,invalidNav=invalid,
@@ -31,7 +33,7 @@ namespace Padova.World
         }
         static int savedMoney;static float savedBest;static bool hadMoney,hadBest,prefsSaved;
         [CliCommand("activity_fixture","Development-only setup for traffic and activity state-transition scenarios; does not complete objectives.")]
-        public static object ActivityFixture([CliArg("name","save | restore | target | checkpoint | traffic",Required=true)]string name,
+        public static object ActivityFixture([CliArg("name","save | restore | target | checkpoint | traffic | flee | clear_police",Required=true)]string name,
             [CliArg("distance","Metres before activity target")]float distance=0)
         {
             var g=Game;var a=g.Activities;
@@ -47,6 +49,20 @@ namespace Padova.World
                 if(hadBest)PlayerPrefs.SetFloat("padova.race.best",savedBest);else PlayerPrefs.DeleteKey("padova.race.best");
                 PlayerPrefs.Save();a.Money=savedMoney;a.BestRace=savedBest;prefsSaved=false;
             }
+            else if(name=="flee")
+            {
+                // Move the driven car to a lane far from every patrol to exercise evasion, not driving skill.
+                if(!g.Driving)throw new InvalidOperationException("Enter a car first");var net=g.Traffic.Network;Vector3 best=g.Position;float bestScore=-1;Vector3 bestTangent=Vector3.forward;
+                for(int i=0;i<net.Lanes.Count;i+=7)
+                {
+                    var p=net.Sample(i,net.Lanes[i].Length*.5f,out var tangent);if(Mathf.Abs(p.x)>1100||Mathf.Abs(p.z)>950)continue;
+                    float score=float.MaxValue;foreach(var q in g.Police.Positions)score=Mathf.Min(score,Vector3.Distance(p,q));
+                    if(score>bestScore&&score<700){bestScore=score;best=p;bestTangent=tangent;}
+                }
+                var car=g.Driving;var pos=best+Vector3.up*.3f;car.Body.linearVelocity=Vector3.zero;car.Body.angularVelocity=Vector3.zero;
+                car.Body.position=pos;car.Body.rotation=Quaternion.LookRotation(bestTangent.WithY(0));car.transform.SetPositionAndRotation(pos,car.Body.rotation);Physics.SyncTransforms();
+            }
+            else if(name=="clear_police"){g.Police.Clear();}
             else if(name=="traffic")
             {
                 Fixture("reset");var v=g.Traffic.Vehicles.First(v=>v.Go.activeSelf);var p=v.Go.transform.position+v.Go.transform.forward*5;

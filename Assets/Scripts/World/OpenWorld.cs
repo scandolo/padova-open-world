@@ -9,7 +9,7 @@ namespace Padova.World
     public sealed class OpenWorld:MonoBehaviour
     {
         public ThirdPersonMotor Player;public WorldContext City;public CityCar[] Cars;public TourPlane Plane;public CityCrowd Crowd;
-        public CityTraffic Traffic;public Activities Activities;public CityTraffic.Vehicle NearbyTraffic{get;private set;}
+        public CityTraffic Traffic;public Activities Activities;public Police Police;public CityTraffic.Vehicle NearbyTraffic{get;private set;}
         public Texture2D MapTexture;public bool MapOpen;public string Mode="walk";
         public CityCar Driving{get;private set;}public CityCar Nearby{get;private set;}
         public bool HasWaypoint;public Vector3 Waypoint;public string DestinationName="";
@@ -96,7 +96,7 @@ namespace Padova.World
                 body.AddComponent<MeshFilter>().sharedMesh=mesh;body.AddComponent<MeshRenderer>().sharedMaterials=materials;
                 var (wheelMesh,wheelMaterials)=Traffic.WheelMesh;
                 var car=CityCar.Equip(go,()=>{var wheel=new GameObject("Wheel");wheel.AddComponent<MeshFilter>().sharedMesh=wheelMesh;wheel.AddComponent<MeshRenderer>().sharedMaterials=wheelMaterials;return wheel.transform;});
-                var cars=new System.Collections.Generic.List<CityCar>(Cars){car};Cars=cars.ToArray();EnterCar(car);
+                var cars=new System.Collections.Generic.List<CityCar>(Cars){car};Cars=cars.ToArray();EnterCar(car);if(Police)Police.Raise(1,"Car theft reported");
             });
             NearbyTraffic=null;
         }
@@ -117,7 +117,7 @@ namespace Padova.World
         }
         public void LaunchFlight()
         {
-            if(MapOpen)return;if(Mode=="drive"&&!ExitCar())return;
+            if(MapOpen)return;if(Police && Police.Wanted>0){Notify("Lose the police before taking off.");return;}if(Mode=="drive"&&!ExitCar())return;
             returnPoint=Player.transform.position;returnYaw=Player.FollowCamera.Yaw;PlayerActive(false);Mode="fly";
             Plane.Launch(new Vector3(returnPoint.x,150,returnPoint.z),returnYaw);Notify("Sightseeing flight · Arrows climb / bank · F return to your walk");
         }
@@ -164,7 +164,8 @@ namespace Padova.World
             var ink=new Color(.035f,.07f,.09f,.90f);Panel(new Rect(26,25,445,81),ink);
             GUI.Label(new Rect(45,35,425,35),"PADOVA  /  CENTRO STORICO",title);
             GUI.Label(new Rect(45,75,425,22),"Explore  ·  "+Discoveries+" / "+Visited.Length+" places discovered",small);
-            Panel(new Rect(1320,25,252,81),ink);GUI.Label(new Rect(1340,36,220,30),Mode=="drive"?Mathf.RoundToInt(Driving.Speed*3.6f)+" km/h":Mode=="fly"?Mathf.RoundToInt(Plane.Speed*3.6f)+" km/h   "+Mathf.RoundToInt(Plane.Altitude)+" m":"ON FOOT  ·  N ↑",body);
+            Panel(new Rect(1320,25,252,81),ink);GUI.Label(new Rect(1340,36,220,30),Mode=="drive"?Mathf.RoundToInt(Driving.Speed*3.6f)+" km/h"+(Driving.Boosting?"   TURBO":""):Mode=="fly"?Mathf.RoundToInt(Plane.Speed*3.6f)+" km/h   "+Mathf.RoundToInt(Plane.Altitude)+" m":"ON FOOT  ·  N ↑",body);
+            if(Mode=="drive"){Panel(new Rect(1340,64,210,4),new Color(1,1,1,.15f));Panel(new Rect(1340,64,210*Driving.Boost,4),Driving.Boosting?new Color(1,.45f,.1f):new Color(1,.7f,.25f));}
             if(GUI.Button(new Rect(1340,71,210,25),"M   ·   Open city map"))SetMap(!MapOpen);
             if(Time.unscaledTime<noticeUntil){Panel(new Rect(26,121,710,45),ink);GUI.Label(new Rect(43,130,680,28),Notice,body);}
             if(HasWaypoint)
@@ -176,7 +177,7 @@ namespace Padova.World
             if(Nearby && Mode=="walk"&&!MapOpen){Panel(new Rect(590,770,420,50),ink);GUI.Label(new Rect(610,783,390,30),"RETURN  ·  Drive the "+Nearby.name,body);}
             if(NearbyTraffic!=null && !MapOpen){Panel(new Rect(590,770,420,50),ink);GUI.Label(new Rect(610,783,390,30),"RETURN  ·  Take the "+NearbyTraffic.Colour+" car",body);}
             Panel(new Rect(26,899,1240,65),ink);
-            GUI.Label(new Rect(44,910,1205,26),Mode=="walk"?"Arrow keys move  ·  Shift run  ·  Space jump  ·  Return enter car  ·  M map  ·  F fly":Mode=="drive"?"↑ accelerate  ·  ↓ reverse  ·  ← → steer  ·  Space brake  ·  Return exit  ·  M map  ·  R reset car":"↑ climb  ·  ↓ descend  ·  ← → bank  ·  Shift faster  ·  Space slow  ·  M map  ·  F return to walking",body);
+            GUI.Label(new Rect(44,910,1205,26),Mode=="walk"?"Arrow keys move  ·  Shift run  ·  Space jump  ·  Return enter car  ·  M map  ·  F fly":Mode=="drive"?"↑ accelerate  ·  ↓ reverse  ·  ← → steer  ·  Shift turbo  ·  Space brake  ·  Return exit  ·  M map  ·  R reset car":"↑ climb  ·  ↓ descend  ·  ← → bank  ·  Shift faster  ·  Space slow  ·  M map  ·  F return to walking",body);
             GUI.Label(new Rect(44,939,1205,22),Mode=="walk"?"Q / E orbit  ·  Click-drag look  ·  C centre camera  ·  Tab toggle run  ·  R return to the market":Mode=="drive"?"Brake to a stop before getting out. R returns this car to its parking position.":"Flight assistance keeps the plane above the skyline. F returns you to your previous walking position.",small);
             Panel(new Rect(0,979,1600,21),ink);GUI.Label(new Rect(26,980,1550,21),"Comune di Padova / Regione Veneto · IODL 2.0  |  Names © OpenStreetMap · ODbL  |  Poly Haven / Kenney · CC0  |  Façade detail and street life are authored",small);
             if(MapOpen)DrawMap();GUI.matrix=old;
@@ -188,6 +189,7 @@ namespace Padova.World
             var r=MapRect;float h=MapSpan*r.height/r.width;
             GUI.DrawTextureWithTexCoords(r,MapTexture,new Rect((MapCentre.x-MapSpan/2+1500)/3000,(MapCentre.y-h/2+1300)/2600,MapSpan/3000,h/2600));
             GUI.BeginGroup(r);
+            if(Police)foreach(var point in Police.Positions){var p=WorldToMap(point)-r.position;Dot(p,Color.white,13);Dot(p,new Color(.85f,.12f,.1f),9);}
             if(Activities && Activities.Active)foreach(var point in Activities.Route)Dot(WorldToMap(point)-r.position,new Color(.1f,.55f,.7f),5);
             foreach(var car in Cars){var p=WorldToMap(car.transform.position)-r.position;if(p.x>0&&p.y>0&&p.x<r.width&&p.y<r.height){Dot(p,new Color(.14f,.45f,.62f),10);GUI.Label(new Rect(p.x+9,p.y-11,130,24),"Car",label);}}
             var occupied=new System.Collections.Generic.List<Rect>();

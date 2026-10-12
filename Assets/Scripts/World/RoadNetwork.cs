@@ -11,6 +11,9 @@ namespace Padova.World
         public sealed class Lane {public int From,To;public string Name;public Vector3[] Points;public float[] Distance;public float Length=>Distance[Distance.Length-1];}
         public readonly List<Vector3> Nodes=new();public readonly List<Lane> Lanes=new();public readonly List<List<int>> Outgoing=new();
         public float TotalLength{get;private set;}
+        /// <summary>Lanes a car body cannot drive along (architecture on the lane); null means all open.</summary>
+        public bool[] Closed;
+        public bool Open(int lane)=>Closed==null||!Closed[lane];
         /// <param name="ground">Surface height at (x,z).</param>
         /// <param name="offset">Lane centre distance to the right of the surveyed centreline; tapered to zero at junctions.</param>
         public static RoadNetwork Build(WorldRoad[] roads,Func<float,float,float> ground,float spacing=4,float offset=1.6f,float snap=1.5f)
@@ -75,18 +78,22 @@ namespace Padova.World
         /// <summary>Next lane at a junction, avoiding an immediate U-turn unless the road ends.</summary>
         public int Next(int lane,System.Random random)
         {
-            var l=Lanes[lane];var options=Outgoing[l.To];int count=0;
-            foreach(int o in options)if(Lanes[o].To!=l.From)count++;
-            if(count==0)return options.Count>0?options[random.Next(options.Count)]:lane;
-            int pick=random.Next(count);foreach(int o in options)if(Lanes[o].To!=l.From&&pick--==0)return o;
+            var l=Lanes[lane];var options=Outgoing[l.To];int count=0,open=0;
+            foreach(int o in options)if(Open(o)){open++;if(Lanes[o].To!=l.From)count++;}
+            if(count==0)
+            {
+                if(open>0){int u=random.Next(open);foreach(int o in options)if(Open(o)&&u--==0)return o;}
+                return options.Count>0?options[random.Next(options.Count)]:lane;
+            }
+            int pick=random.Next(count);foreach(int o in options)if(Open(o)&&Lanes[o].To!=l.From&&pick--==0)return o;
             return lane;
         }
-        public (int lane,float s,float distance) Nearest(Vector3 p)
+        public (int lane,float s,float distance) Nearest(Vector3 p,bool openOnly=false)
         {
             int best=-1;float bestS=0,bestD=float.MaxValue;
             for(int i=0;i<Lanes.Count;i++)
             {
-                var l=Lanes[i];
+                if(openOnly&&!Open(i))continue;var l=Lanes[i];
                 for(int j=0;j<l.Points.Length;j++)
                 {
                     float dx=l.Points[j].x-p.x,dz=l.Points[j].z-p.z,d=dx*dx+dz*dz;
@@ -95,14 +102,14 @@ namespace Padova.World
             }
             return (best,bestS,Mathf.Sqrt(bestD));
         }
-        public int NearestNode(Vector3 p)
+        public int NearestNode(Vector3 p,bool openOnly=false)
         {
             int best=-1;float bestD=float.MaxValue;
-            for(int i=0;i<Nodes.Count;i++){if(Outgoing[i].Count==0)continue;float dx=Nodes[i].x-p.x,dz=Nodes[i].z-p.z,d=dx*dx+dz*dz;if(d<bestD){bestD=d;best=i;}}
+            for(int i=0;i<Nodes.Count;i++){if(Outgoing[i].Count==0||openOnly&&!Outgoing[i].Exists(Open))continue;float dx=Nodes[i].x-p.x,dz=Nodes[i].z-p.z,d=dx*dx+dz*dz;if(d<bestD){bestD=d;best=i;}}
             return best;
         }
         /// <summary>Shortest lane sequence between two nodes (Dijkstra); empty when unreachable.</summary>
-        public List<int> Route(int from,int to)
+        public List<int> Route(int from,int to,bool openOnly=false)
         {
             var result=new List<int>();if(from<0||to<0||from==to)return result;
             var cost=new float[Nodes.Count];var via=new int[Nodes.Count];
@@ -113,6 +120,7 @@ namespace Padova.World
                 var (c,n)=open.Min;open.Remove(open.Min);if(n==to)break;if(c>cost[n])continue;
                 foreach(int lane in Outgoing[n])
                 {
+                    if(openOnly&&!Open(lane))continue;
                     int m=Lanes[lane].To;float next=c+Lanes[lane].Length;
                     if(next<cost[m]){if(cost[m]<float.MaxValue)open.Remove((cost[m],m));cost[m]=next;via[m]=lane;open.Add((next,m));}
                 }
@@ -120,6 +128,12 @@ namespace Padova.World
             if(via[to]<0)return result;
             for(int n=to;n!=from;n=Lanes[via[n]].From)result.Add(via[n]);
             result.Reverse();return result;
+        }
+        /// <summary>Route along open lanes, falling back to every surveyed lane when the open network is disconnected.</summary>
+        public List<int> DriveRoute(Vector3 from,Vector3 to)
+        {
+            var route=Route(NearestNode(from,true),NearestNode(to,true),true);
+            return route.Count>0?route:Route(NearestNode(from),NearestNode(to));
         }
         public float Length(List<int> route){float total=0;foreach(int lane in route)total+=Lanes[lane].Length;return total;}
         /// <summary>Points every <paramref name="step"/> metres along a route, ending exactly at its last point.</summary>
