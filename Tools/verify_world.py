@@ -23,7 +23,7 @@ def delta(a,b):return math.dist(a['position'],b['position'])
 def reset():
     v.call('world_fixture','--name','reset');return until(lambda s:s['mode']=='walk' and s['playerEnabled'])
 def run_case(name):
-    if name in ['traffic','taxi','race']:return activity_case(name)
+    if name in ['traffic','taxi','race','police']:return activity_case(name)
     if name not in ['map','car','flight','crowd','quiet_flight','santo','prato','landmarks']:return original(name)
     reset()
     if name=='quiet_flight':
@@ -49,7 +49,7 @@ def run_case(name):
         return {'waypoint':marked['waypoint'],'screenshot':screenshot,'pausedMovement':True}
     if name=='car':
         v.call('world_fixture','--name','car');near=until(lambda s:s['nearby']!='')
-        v.press('Enter');start=until(lambda s:s['mode']=='drive')
+        v.press('E');start=until(lambda s:s['mode']=='drive')
         assert not start['playerEnabled'] and not start['colliderEnabled'],start
         v.down('UpArrow')
         try:moving=until(lambda s:s['carSpeed']>3 and delta(start,s)>4)
@@ -60,7 +60,7 @@ def run_case(name):
         v.down('Space')
         try:stopped=until(lambda s:s['carSpeed']<.3)
         finally:v.up('Space')
-        screenshot=v.capture('world/car-native.png');v.press('Enter');end=until(lambda s:s['mode']=='walk' and s['playerEnabled'])
+        screenshot=v.capture('world/car-native.png');v.press('E');end=until(lambda s:s['mode']=='walk' and s['playerEnabled'])
         assert math.dist(end['player'],stopped['position'])<4,end
         return {'speedMps':moving['carSpeed'],'distance':delta(start,stopped),'steeringDegrees':abs(steered['carHeading']-moving['carHeading']),'exitPosition':end['player'],'screenshot':screenshot}
     if name=='flight':
@@ -145,6 +145,30 @@ def activity_case(name):
             assert taken['cars']==near['cars']+1 and taken['traffic']==near['traffic'],taken
             time.sleep(2);screenshot=v.capture('world/traffic-native.png')
             return {'count':moving['traffic'],'moving':moving['trafficMoving'],'travelMetres':moving['trafficTravel']-start['trafficTravel'],'takeover':True,'mapPausesTraffic':True,'screenshot':screenshot}
+        if name=='police':
+            def steal():
+                for _ in range(4):
+                    v.call('activity_fixture','--name','traffic')
+                    try:until(lambda s:s['nearbyTraffic'],8)
+                    except AssertionError:continue
+                    v.press('E')
+                    try:return until(lambda s:s['mode']=='drive',4)
+                    except AssertionError:continue
+                raise AssertionError('Could not take a traffic car')
+            v.call('activity_fixture','--name','clear_police');until(lambda s:s['wanted']==0)
+            start=steal();assert start['wanted']==1,start
+            # Stay put: a patrol must find the player by road and make the arrest.
+            chased=until(lambda s:s['police']>=1 and s['policeMoving']>=1,20)
+            busted=until(lambda s:s['busts']==1,90)
+            assert busted['wanted']==0 and busted['mode']=='walk',busted
+            screenshot=v.capture('world/police-busted-native.png')
+            # Second theft: drive at the patrols' worst position and wait out the evasion timer.
+            steal();until(lambda s:s['police']>=1,20)
+            v.call('activity_fixture','--name','flee');escaped=until(lambda s:s['escapes']==1,40)
+            assert escaped['wanted']==0,escaped
+            v.press('E');until(lambda s:s['mode']=='walk',6)
+            return {'firstSpawnMetres':chased['policeNearest'],'fineEuros':start['money']-busted['money'],'escaped':True,'screenshot':screenshot,
+                    'fixture':'Traffic car placement and the escape teleport are fixtures; police routing, arrest and evasion timers are game logic.'}
         if name=='taxi':
             choose('Digit1');until(lambda s:not s['menu']);assert state()['activity']=='' # Cannot start on foot.
             start=enter_car();choose('Digit1');pickup=until(lambda s:s['phase']=='pickup')
@@ -187,7 +211,7 @@ def activity_case(name):
 
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,traffic,taxi,race,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,traffic,taxi,race,police,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True

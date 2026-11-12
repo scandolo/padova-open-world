@@ -34,6 +34,10 @@ namespace Padova.Gameplay
         CharacterController controller;
         InputAction jumpAction, runToggleAction, resetAction;
         bool jumpRequested;
+        // Movement basis is held while the same keys stay down, so a camera swinging in behind
+        // the walker cannot feed back into the direction of travel (the original prototype's rule).
+        Vector2 basisInput;
+        float basisYaw;
 
         void Awake()
         {
@@ -88,7 +92,10 @@ namespace Padova.Gameplay
             }
             jumpRequested = false;
             MoveInput = input;
-            var facing = Quaternion.Euler(0, FollowCamera ? FollowCamera.Yaw : SpawnYaw, 0);
+            float cameraYaw = FollowCamera ? FollowCamera.Yaw : SpawnYaw;
+            if (input != basisInput || input == Vector2.zero || FollowCamera && FollowCamera.Looking) basisYaw = cameraYaw;
+            basisInput = input;
+            var facing = Quaternion.Euler(0, basisYaw, 0);
             var direction = facing * new Vector3(input.x, 0, input.y);
             direction = Vector3.ClampMagnitude(direction, 1);
             var desired = direction * (sprint ? RunSpeed : WalkSpeed);

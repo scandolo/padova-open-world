@@ -37,6 +37,10 @@ public static class BuildOpenWorld
         beacon.SetFloat("_Surface",1);beacon.SetFloat("_SrcBlend",(float)UnityEngine.Rendering.BlendMode.SrcAlpha);beacon.SetFloat("_DstBlend",(float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         beacon.SetFloat("_ZWrite",0);beacon.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");beacon.SetOverrideTag("RenderType","Transparent");beacon.renderQueue=3000;
         EditorUtility.SetDirty(beacon);game.Activities.BeaconMaterial=beacon;
+        AssetDatabase.ImportAsset("Assets/Shaders/Minimap.shader",ImportAssetOptions.ForceSynchronousImport);
+        string minimapPath=Folder+"/Minimap.mat";var minimap=AssetDatabase.LoadAssetAtPath<Material>(minimapPath);
+        if(!minimap){minimap=new Material(Shader.Find("Padova/Minimap"));AssetDatabase.CreateAsset(minimap,minimapPath);}
+        game.MinimapMaterial=minimap;
         game.Police=game.GetComponent<Police>()??game.gameObject.AddComponent<Police>();game.Police.Game=game;game.Police.Traffic=game.Traffic;game.Police.Activities=game.Activities;game.Police.LightMaterial=beacon;
         game.Crowd.Count=64;
     }

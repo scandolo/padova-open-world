@@ -43,7 +43,7 @@ python3 Tools/verify_playable.py --build --measure
 
 `Landmarks.cs` adds the clock dial/gateway, Capitanio frontage, Duomo/baptistery domes and Bo double courtyard colonnade. [Sources and simplifications](../Data/World/landmarks.md) identify the actual source units. `Streetscape` adds authored market stalls, lamps and benches. `WorldShapes` contains original street-object and vehicle geometry.
 
-`Padova.World` contains pedestrian navigation, WheelCollider cars, an assisted arcade aircraft, map, waypoint and discovery HUD. `BuildOpenWorld.cs` saves the scene and bakes the pedestrian NavMesh. See [controls and regeneration](PLAYABLE.md).
+`Padova.World` contains pedestrian navigation, WheelCollider cars, AI traffic, police, activities, an assisted arcade aircraft, map, minimap, waypoint and discovery HUD (`Hud.cs` holds the shared look). `BuildOpenWorld.cs` saves the scene and bakes the pedestrian NavMesh. See [controls and regeneration](PLAYABLE.md).
 
 ## Blender landmark models
 
@@ -55,7 +55,7 @@ Blender UVs are metric like MeshSink, but shifted per face by whole 8.8 m period
 
 - Ordinary façades, roof shapes and much landmark ornament are typology, not measured elevations. Other landmarks, including Palazzo Moroni and the Gran Guardia, still have generic treatments.
 - The detailed core and lower-detail surroundings differ in façade detail. The finite map has boundaries; it is not all of Padova.
-- Pedestrians walk central routes. Cars are drivable, with authored AI lanes on surveyed centrelines, taxi fares and a checkpoint sprint. Traffic rules and lane offsets are gameplay assumptions; interiors remain absent.
+- Pedestrians walk central routes. Cars are drivable, with authored AI lanes on surveyed centrelines, taxi fares, a checkpoint sprint and police pursuit. Traffic rules and lane offsets are gameplay assumptions; lanes that would clip architecture are closed to traffic rather than altered. Interiors remain absent.
 - Ground is interpolated, and waterways are visual context. There is no hydrology or water-driving simulation.
 - Flight starts airborne with assistance; there is no runway, landing or flight-simulator model.
 - The M4 Air performance target still needs a representative 20-minute measurement.

@@ -15,28 +15,36 @@ namespace Padova.World
         public bool Autopilot;public float AutoThrottle,AutoSteer,TopSpeed=22;public bool AutoBrake;
         public float Speed=>Body?Body.linearVelocity.magnitude:0;
         public Rigidbody Body{get;private set;}
-        Vector3 lastPosition;
+        Vector3 lastPosition;float steering;
+        public bool Handbrake{get;private set;}
         void Awake(){Body=GetComponent<Rigidbody>();Body.centerOfMass=new Vector3(0,.28f,0);Home=transform.position;HomeRotation=transform.rotation;lastPosition=Home;}
         void FixedUpdate()
         {
-            var k=Keyboard.current;float throttle=0,steer=0;bool brake=true;
+            var k=Keyboard.current;float throttle=0,steer=0;bool brake=true;Handbrake=false;
+            float dt=Time.fixedDeltaTime;
             if(Driven && !Paused && k!=null)
             {
                 throttle=(k.upArrowKey.isPressed||k.wKey.isPressed?1:0)-(k.downArrowKey.isPressed||k.sKey.isPressed?1:0);
-                steer=(k.rightArrowKey.isPressed||k.dKey.isPressed?1:0)-(k.leftArrowKey.isPressed||k.aKey.isPressed?1:0);
-                brake=k.spaceKey.isPressed;
+                float keys=(k.rightArrowKey.isPressed||k.dKey.isPressed?1:0)-(k.leftArrowKey.isPressed||k.aKey.isPressed?1:0);
+                // Keyboard steering ramps in and recentres quickly instead of snapping to full lock.
+                steering=Mathf.MoveTowards(steering,keys,(keys==0||keys*steering<0?6:3.2f)*dt);steer=steering;
+                Handbrake=k.spaceKey.isPressed;brake=false;
             }
             else if(Autopilot && !Paused){throttle=AutoThrottle;steer=AutoSteer;brake=AutoBrake;}
-            float dt=Time.fixedDeltaTime;
-            Boosting=Driven && !Paused && k!=null && (k.leftShiftKey.isPressed||k.rightShiftKey.isPressed) && throttle>0 && Boost>0 && !brake;
+            Boosting=Driven && !Paused && k!=null && (k.leftShiftKey.isPressed||k.rightShiftKey.isPressed) && throttle>0 && Boost>0 && !brake && !Handbrake;
             Boost=Mathf.Clamp01(Boost+(Boosting?-dt/3:dt/8));
             float forward=Vector3.Dot(Body.linearVelocity,transform.forward),top=Boosting?34:TopSpeed;
             if(Boosting)Body.AddForce(transform.forward*4200);
+            // Pressing against the direction of travel brakes first, then reverses once nearly stopped.
+            bool footBrake=throttle*forward< -.5f && Mathf.Abs(forward)>1;
             foreach(var w in Wheels)
             {
-                w.motorTorque=brake?0:(forward>top && throttle>0 || forward< -7 && throttle<0?0:throttle*(Boosting?1100:650));
-                w.brakeTorque=brake?2400:Mathf.Abs(throttle)<.1f?80:0;
-                if(w.transform.localPosition.z>0)w.steerAngle=steer*Mathf.Lerp(32,12,Speed/22);
+                bool rear=w.transform.localPosition.z<0;
+                w.motorTorque=brake||footBrake||Handbrake&&rear?0:(forward>top && throttle>0 || forward< -7 && throttle<0?0:throttle*(Boosting?1100:650));
+                w.brakeTorque=brake?2400:footBrake?2600:Handbrake&&rear?3200:Mathf.Abs(throttle)<.1f?80:0;
+                // Handbrake loosens the rear tyres so the car can be flicked round tight historic corners.
+                var friction=w.sidewaysFriction;friction.stiffness=Handbrake&&rear?.75f:1.8f;w.sidewaysFriction=friction;
+                if(!rear)w.steerAngle=steer*Mathf.Lerp(34,10,Speed/24);
             }
             Body.AddForce(-transform.up*Speed*12);
             DistanceTravelled+=Vector3.Distance(lastPosition,transform.position);lastPosition=transform.position;

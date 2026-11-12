@@ -20,12 +20,20 @@ namespace Padova.Gameplay
             public int jumps, contacts, recoveries, frame;
         }
         static ThirdPersonMotor Player => UnityEngine.Object.FindFirstObjectByType<ThirdPersonMotor>();
+        /// <summary>QA only: keyboard input is accepted while another app has focus, so a test run survives the user touching the Mac.</summary>
+        public static bool FocusIgnored;
+        [CliCommand("gameplay_focus_policy", "QA only: accept device input while the Player is unfocused (in memory, not saved).")]
+        public static State FocusPolicy([CliArg("ignore", "true to ignore focus", Required=true)] bool ignore)
+        {
+            UnityEngine.InputSystem.InputSystem.settings.backgroundBehavior=ignore?UnityEngine.InputSystem.InputSettings.BackgroundBehavior.IgnoreFocus:UnityEngine.InputSystem.InputSettings.BackgroundBehavior.ResetAndDisableNonBackgroundDevices;
+            FocusIgnored=ignore;return Read();
+        }
         static float[] XYZ(Vector3 v) => new[] {v.x,v.y,v.z};
         [CliCommand("gameplay_state", "Read player, animation, camera and objective state without runtime compilation.")]
         public static State Read()
         {
             var p=Player;
-            var s=new State {ready=p!=null,playing=Application.isPlaying,focused=Application.isFocused,scene=SceneManager.GetActiveScene().name,frame=Time.frameCount};
+            var s=new State {ready=p!=null,playing=Application.isPlaying,focused=Application.isFocused||FocusIgnored,scene=SceneManager.GetActiveScene().name,frame=Time.frameCount};
             if(!p)return s;
             s.position=XYZ(p.transform.position);s.spawn=XYZ(p.Spawn);s.goal=XYZ(p.Goal);
             s.grounded=p.Grounded;s.speed=p.CurrentSpeed;s.travel=p.TravelledMetres;s.jumps=p.JumpCount;

@@ -131,10 +131,12 @@ def run_case(name):
             moves[key]=delta
         reset();press('Tab');assert state()['runToggled']
         press('Tab');assert not state()['runToggled']
-        before=state()['cameraYaw'];down('Q')
-        try:until(lambda n:abs(n['cameraYaw']-before)>10)
-        finally:up('Q')
-        press('C');assert abs(state()['cameraYaw']-180)<2
+        # The chase camera swings in behind the direction of travel (original prototype behaviour).
+        before=reset()['cameraYaw'];down('LeftArrow')
+        try:until(lambda n:abs((n['cameraYaw']-before+180)%360-180)>20,8)
+        finally:up('LeftArrow')
+        reset();press('C');assert abs(state()['cameraYaw']-180)<2
+        press('C');press('C') # Cycle close → high → back to the chase view.
         return moves
     if name=='locomotion':
         s,w=travel(3);assert 2.8<w['speed']<3.8,w
@@ -213,6 +215,8 @@ def main(args):
         assert s['scene']=='PadovaPlayable',s
         if player:
             report.update(playerPid=player.pid,buildGuid=descriptor().get('buildGuid'))
+            if getattr(args,'ignore_focus',False):
+                call('gameplay_focus_policy','--ignore','true');report['focusPolicy']='IgnoreFocus (QA only, in memory)'
             subprocess.run(['open','-a',str(APP)],check=True)
             focus_end=time.monotonic()+5
             while not state().get('focused',False):

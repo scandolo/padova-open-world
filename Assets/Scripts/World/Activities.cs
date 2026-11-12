@@ -16,7 +16,7 @@ namespace Padova.World
         public string Kind="",Phase="",Objective="";public float Clock,Limit,Fare,RouteLength;public Vector3 Target;public int Checkpoint,ImpactsAtStart;
         public readonly List<Vector3> Route=new();public readonly List<Vector3> Checkpoints=new();
         public bool Active=>Kind!="";
-        Transform beacon,nextBeacon;GameObject passenger;MaterialPropertyBlock block;float countdown;GUIStyle title,body,small;
+        Transform beacon,nextBeacon;GameObject passenger;MaterialPropertyBlock block;float countdown,bannerAt=-10;string bannerTitle="",bannerSubtitle="";
         InputAction menuAction,taxiAction,raceAction,quitAction;bool menuRequested,taxiRequested,raceRequested,quitRequested;
         readonly System.Random random=new(611);
         void Awake()
@@ -114,8 +114,8 @@ namespace Padova.World
                 {
                     int crashes=car.Impacts-ImpactsAtStart;float pay=Fare*(Clock<=Limit?1:.5f)+(Clock<Limit*.7f?5:0)-crashes*3;pay=Mathf.Max(2,Mathf.Round(pay));
                     Pay((int)pay);Fares++;
-                    string receipt="Fare complete · +€"+pay+(Clock>Limit?" (late)":Clock<Limit*.7f?" incl. €5 tip":"")+(crashes>0?" · "+crashes+" bumps −€"+crashes*3:"");
-                    NextFare();Result(receipt);
+                    string receipt="+€"+pay+(Clock>Limit?"  ·  late":Clock<Limit*.7f?"  ·  incl. €5 tip":"")+(crashes>0?"  ·  "+crashes+" bumps −€"+crashes*3:"");
+                    NextFare();Result("FARE COMPLETE",receipt);
                 }
                 else if(Clock>Limit*2)End("Too slow: the passenger got out and walked.");
             }
@@ -154,7 +154,7 @@ namespace Padova.World
                     float gold=RouteLength/15,silver=RouteLength/12,bronze=RouteLength/9;
                     int reward=Clock<=gold?60:Clock<=silver?35:Clock<=bronze?20:5;string medal=Clock<=gold?"GOLD":Clock<=silver?"SILVER":Clock<=bronze?"BRONZE":"finished";
                     bool record=BestRace<=0||Clock<BestRace;if(record){BestRace=Clock;PlayerPrefs.SetFloat("padova.race.best",BestRace);}
-                    Pay(reward);End("");Result("Sprint "+medal+" · "+Clock.ToString("0.0")+" s · +€"+reward+(record?" · new best":""));return;
+                    Pay(reward);End("");Result(medal.ToUpperInvariant(),Clock.ToString("0.0")+" s  ·  +€"+reward+(record?"  ·  new best":""));return;
                 }
             }
             ShowCheckpoints();Game.SetWaypoint(Checkpoints[Checkpoint],"Checkpoint "+(Checkpoint+1),false);
@@ -171,7 +171,7 @@ namespace Padova.World
         }
         public void Charge(int amount){Pay(-Mathf.Min(amount,Money));}
         void Pay(int amount){Money+=amount;PlayerPrefs.SetInt("padova.money",Money);PlayerPrefs.Save();}
-        void Result(string message){Game.Notify(message);}
+        void Result(string title,string subtitle){bannerTitle=title;bannerSubtitle=subtitle;bannerAt=Time.unscaledTime;Game.Notify(title+" · "+subtitle);}
         void HideBeacons(){beacon.gameObject.SetActive(false);nextBeacon.gameObject.SetActive(false);}
         public void End(string message)
         {
@@ -179,33 +179,47 @@ namespace Padova.World
             Kind=Phase=Objective="";Route.Clear();Checkpoints.Clear();HideBeacons();Game.HasWaypoint=false;if(passenger)Destroy(passenger);
         }
         static float Flat(Vector3 a,Vector3 b)=>Vector2.Distance(new Vector2(a.x,a.z),new Vector2(b.x,b.z));
-        static void Panel(Rect r,Color c){var old=GUI.color;GUI.color=c;GUI.DrawTexture(r,Texture2D.whiteTexture);GUI.color=old;}
         void OnGUI()
         {
-            if(!Game || Game.MapOpen)return;
-            if(title==null)
-            {
-                GUIStyle S(int size,Color color,FontStyle weight=FontStyle.Normal){var s=new GUIStyle(GUI.skin.label){fontSize=size,fontStyle=weight};s.normal.textColor=color;return s;}
-                title=S(21,new Color(.98f,.94f,.85f),FontStyle.Bold);body=S(17,Color.white);small=S(13,new Color(.82f,.86f,.85f));
-            }
-            var old=GUI.matrix;GUI.matrix=Matrix4x4.Scale(new Vector3(Screen.width/1600f,Screen.height/1000f,1));var ink=new Color(.035f,.07f,.09f,.90f);
-            Panel(new Rect(1320,118,252,40),ink);GUI.Label(new Rect(1340,125,220,28),"€ "+Money+"   ·   J activities",body);
+            if(!Game || Game.MapOpen)return;var old=GUI.matrix;Hud.Begin();
+            Hud.Text(new Rect(1170,18,400,64),"€"+Money.ToString("N0"),58,Hud.Money,TextAnchor.UpperRight,false,true);
             if(Active)
             {
-                Panel(new Rect(1080,170,492,98),ink);GUI.Label(new Rect(1098,178,460,28),Kind=="taxi"?"TAXI  ·  fare "+(Fares+1):"SPRINT  ·  Garibaldi → Prato",title);
-                GUI.Label(new Rect(1098,208,460,26),Objective,body);
-                string time=Kind=="taxi"?(Phase=="dropoff"?Clock.ToString("0")+" / "+Limit+" s  ·  fare €"+Fare:"No meter running"):Phase=="racing"?Clock.ToString("0.0")+" s"+(BestRace>0?"  ·  best "+BestRace.ToString("0.0")+" s":""):RouteLength>0?Mathf.RoundToInt(RouteLength)+" m route":"";
-                GUI.Label(new Rect(1098,237,460,22),time+"   ·   J then 0 to quit",small);
+                // Timer under the wallet; objective as a subtitle above the bottom edge.
+                string title=Kind=="taxi"?"TAXI · FARE "+(Fares+1):"SPRINT · GARIBALDI → PRATO";
+                string clock=Kind=="taxi"?(Phase=="dropoff"?Mathf.Max(0,Limit-Clock).ToString("0"):""):Phase=="racing"?Clock.ToString("0.0"):"";
+                Hud.Text(new Rect(1070,118,500,28),title,24,Hud.Gold,TextAnchor.UpperRight,false,true);
+                if(clock!="")Hud.Text(new Rect(1170,142,400,60),clock,52,Kind=="taxi"&&Clock>Limit*.8f?Hud.Danger:Color.white,TextAnchor.UpperRight,false,true);
+                string detail=Kind=="taxi"&&Phase=="dropoff"?"Fare €"+Fare+(Clock>Limit?" · late: half fare":""):Kind=="race"&&BestRace>0?"Best "+BestRace.ToString("0.0")+" s":"";
+                if(detail!="")Hud.Text(new Rect(1070,196,500,26),detail,19,Hud.Muted,TextAnchor.UpperRight,true);
+                if(Objective!="")Hud.Text(new Rect(200,728,1200,40),Objective,30,Color.white,TextAnchor.MiddleCenter,true);
+                if(Phase=="countdown")Hud.Banner(countdown>0?Mathf.CeilToInt(countdown).ToString():"GO!","",Hud.Gold,1-Mathf.Repeat(countdown,1));
             }
-            if(MenuOpen)
-            {
-                Panel(new Rect(500,300,600,250),new Color(.035f,.07f,.09f,.96f));GUI.Label(new Rect(528,316,540,32),"ACTIVITIES",title);
-                if(GUI.Button(new Rect(528,360,544,52),"1   ·   Taxi — carry passengers across Padova for fares and tips")){MenuOpen=false;StartTaxi();}
-                if(GUI.Button(new Rect(528,420,544,52),"2   ·   Sprint — Corso Garibaldi to Prato della Valle against the clock")){MenuOpen=false;StartRace();}
-                if(Active && GUI.Button(new Rect(528,480,260,40),"0   ·   Quit current activity")){MenuOpen=false;End("Activity abandoned.");}
-                GUI.Label(new Rect(800,488,280,24),"Both need a car  ·  J closes",small);
-            }
+            float since=Time.unscaledTime-bannerAt;if(since<4)Hud.Banner(bannerTitle,bannerSubtitle,Hud.Money,since);
+            if(MenuOpen)Menu();
             GUI.matrix=old;
+        }
+        void Menu()
+        {
+            Hud.Fill(new Rect(0,0,1600,1000),new Color(0,0,0,.4f));
+            var r=new Rect(470,250,660,Active?440:380);Hud.Panel(r,new Color(.03f,.05f,.06f,.94f));
+            Hud.Text(new Rect(r.x+32,r.y+22,500,56),"ACTIVITIES",48,Hud.Gold,TextAnchor.UpperLeft,false,true);
+            Hud.Text(new Rect(r.x+32,r.y+30,r.width-64,40),"€"+Money.ToString("N0"),30,Hud.Money,TextAnchor.UpperRight,false,true);
+            bool Card(float y,string key,string name,string text,string extra)
+            {
+                var c=new Rect(r.x+24,y,r.width-48,104);bool hover=c.Contains(Event.current.mousePosition);
+                Hud.Panel(c,hover?new Color(1,1,1,.12f):new Color(1,1,1,.06f));
+                Hud.Panel(new Rect(c.x+18,c.y+26,52,52),Hud.Cream);Hud.Text(new Rect(c.x+18,c.y+26,52,52),key,34,new Color(.08f,.1f,.12f),TextAnchor.MiddleCenter,false,true);
+                Hud.Text(new Rect(c.x+92,c.y+14,c.width-110,40),name,34,Color.white,TextAnchor.UpperLeft,false,true);
+                Hud.Text(new Rect(c.x+92,c.y+52,c.width-110,26),text,19,Hud.Muted,TextAnchor.UpperLeft,true);
+                Hud.Text(new Rect(c.x+92,c.y+76,c.width-110,22),extra,16,Hud.Gold,TextAnchor.UpperLeft,true);
+                return GUI.Button(c,GUIContent.none,GUIStyle.none);
+            }
+            if(Card(r.y+96,"1","TAXI","Pick up passengers and drive them across Padova.","Fares by distance · tip for speed · €3 per bump")){MenuOpen=false;StartTaxi();}
+            if(Card(r.y+212,"2","SPRINT","Corso Garibaldi to Prato della Valle, checkpoints.",BestRace>0?"Best "+BestRace.ToString("0.0")+" s · gold €60":"Gold €60 · silver €35 · bronze €20")){MenuOpen=false;StartRace();}
+            float y=r.y+332;
+            if(Active){if(GUI.Button(new Rect(r.x+24,y,250,44),GUIContent.none,GUIStyle.none)){MenuOpen=false;End("Activity abandoned.");}Hud.Prompt(new Vector2(r.x+150,y+22),"0","Quit activity",18);y+=56;}
+            Hud.Text(new Rect(r.x+32,y+4,r.width-64,26),"Both need a car — E near any car, even in traffic (the police will notice).   J closes",16,Hud.Muted,TextAnchor.UpperLeft,true);
         }
         void OnDestroy(){menuAction?.Dispose();taxiAction?.Dispose();raceAction?.Dispose();quitAction?.Dispose();}
     }

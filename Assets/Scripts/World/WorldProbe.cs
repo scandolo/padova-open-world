@@ -16,7 +16,7 @@ namespace Padova.World
         {
             var g=Game;if(!g)return new{ready=false};
             int invalid=0;foreach(var a in g.Crowd.GetComponentsInChildren<NavMeshAgent>())if(!a.isOnNavMesh)invalid++;
-            return new{ready=true,mode=g.Mode,mapOpen=g.MapOpen,position=XYZ(g.Position),player=XYZ(g.Player.transform.position),frame=Time.frameCount,focused=Application.isFocused,
+            return new{ready=true,mode=g.Mode,mapOpen=g.MapOpen,position=XYZ(g.Position),player=XYZ(g.Player.transform.position),frame=Time.frameCount,focused=Application.isFocused||Padova.Gameplay.GameplayProbe.FocusIgnored,
                 g.HasWaypoint,waypoint=XYZ(g.Waypoint),mapCentre=new[]{g.MapCentre.x,g.MapCentre.y},mapSpan=g.MapSpan,screenWidth=Screen.width,screenHeight=Screen.height,
                 traffic=g.Traffic.Active,trafficMoving=g.Traffic.Moving,trafficTravel=g.Traffic.TotalTravel,trafficRespawns=g.Traffic.Respawns,
                 trafficCars=g.Traffic.Vehicles.Where(v=>v.Go.activeSelf).Select(v=>new{position=XYZ(v.Go.transform.position),v.Lane,v.S,v.Speed}).ToArray(),

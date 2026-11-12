@@ -10,12 +10,13 @@ namespace Padova.World
     {
         public OpenWorld Game;public CityTraffic Traffic;public Activities Activities;public Material LightMaterial;
         public int Wanted,Busts,Escapes,Spawned;public float Evade,BustTimer;
-        public const int MaxWanted=3;public const float EvadeSeconds=15,LoseDistance=110,BustDistance=7,BustSeconds=2.5f;
-        public sealed class Unit{public CityCar Car;public readonly List<Vector3> Path=new();public int Next;public float Replan,Stuck,ReverseUntil,Lost;public Renderer[] Lights;}
+        public const int MaxWanted=3;public const float EvadeSeconds=15,LoseDistance=110,BustDistance=9,BustSeconds=2.5f;
+        public sealed class Unit{public CityCar Car;public readonly List<Vector3> Path=new();public int Next;public float Replan,Stuck,ReverseUntil,Lost,Closest=float.MaxValue,Stalled;public Renderer[] Lights;}
         public readonly List<Unit> Units=new();
         public float Nearest{get;private set;}=float.MaxValue;
+        bool responding;float respondUntil;
         readonly System.Random random=new(113);Mesh body;Material[] bodyMaterials;Mesh lightMesh;Material[] lightMaterials;MaterialPropertyBlock block;
-        int lastHits;CityCar watched;float heatCooldown,nextSpawn,clearedAt=-1,bannerUntil;string banner="";GUIStyle title,body2,small;
+        int lastHits;CityCar watched;float heatCooldown,nextSpawn,clearedAt=-1,bannerAt=-10;string bannerTitle="",bannerSubtitle="";Color bannerColor;
         RoadNetwork Net=>Traffic?Traffic.Network:null;
         void Start()
         {
@@ -31,7 +32,7 @@ namespace Padova.World
         }
         public void Raise(int amount,string reason)
         {
-            if(amount<=0)return;int before=Wanted;Wanted=Mathf.Clamp(Wanted+amount,0,MaxWanted);Evade=0;clearedAt=-1;
+            if(amount<=0)return;int before=Wanted;Wanted=Mathf.Clamp(Wanted+amount,0,MaxWanted);Evade=0;clearedAt=-1;responding=true;respondUntil=Time.time+45;
             if(Wanted!=before)Game.Notify(reason+" · WANTED "+new string('*',Wanted));
         }
         public void Clear(){Wanted=0;Evade=0;BustTimer=0;clearedAt=Time.time;}
@@ -45,8 +46,10 @@ namespace Padova.World
             if(Wanted>0)
             {
                 if(Units.Count<Wanted && Time.time>nextSpawn){nextSpawn=Time.time+2;Spawn();}
-                Evade=Nearest>LoseDistance?Evade+dt:Mathf.Max(0,Evade-dt*3);
-                if(Evade>=EvadeSeconds){Escapes++;Clear();Banner("You lost the police");return;}
+                // Patrols spawn out of view; evasion only counts once they have had time to respond or have seen you.
+                if(Nearest<LoseDistance)responding=false;else if(Time.time>respondUntil)responding=false;
+                Evade=Nearest>LoseDistance&&!responding?Evade+dt:Mathf.Max(0,Evade-dt*3);
+                if(Evade>=EvadeSeconds){Escapes++;Clear();Banner("ESCAPED","You lost the police",Hud.Money);return;}
                 float playerSpeed=Game.Mode=="drive"?Game.Driving.Speed:0;
                 BustTimer=Nearest<BustDistance && playerSpeed<2.5f?BustTimer+dt:Mathf.Max(0,BustTimer-dt);
                 if(BustTimer>=BustSeconds)Bust();
@@ -66,18 +69,18 @@ namespace Padova.World
             int fine=40*Wanted;Busts++;Clear();
             if(Activities){Activities.Charge(fine);if(Activities.Active)Activities.End("");}
             if(Game.Mode=="drive"){var car=Game.Driving;car.Body.linearVelocity=Vector3.zero;car.Body.angularVelocity=Vector3.zero;Game.ExitCar();}
-            Banner("BUSTED · fine €"+fine);
+            Banner("BUSTED","Fine €"+fine,Hud.Danger);
         }
-        void Banner(string message){banner=message;bannerUntil=Time.unscaledTime+4;Game.Notify(message);}
+        void Banner(string title,string subtitle,Color color){bannerTitle=title;bannerSubtitle=subtitle;bannerColor=color;bannerAt=Time.unscaledTime;Game.Notify(title+(subtitle!=""?" · "+subtitle:""));}
         /// <summary>A patrol appears on a lane 120–240 m away, out of the camera's close view when possible.</summary>
-        void Spawn()
+        void Spawn(float near=120,float far=240)
         {
             var focus=Game.Position;var camera=Camera.main;
             for(int attempt=0;attempt<50;attempt++)
             {
-                int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<20)continue;
+                int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<20||!Net.Open(lane))continue;
                 var p=Net.Sample(lane,l.Length*.5f,out var tangent);float d=Flat(p,focus);
-                if(d<120||d>240)continue;
+                if(d<near||d>far)continue;
                 if(camera && attempt<35){var vp=camera.WorldToViewportPoint(p);if(vp.z>0&&vp.x>0&&vp.x<1&&vp.y>0&&vp.y<1)continue;}
                 var rotation=Quaternion.LookRotation(tangent.WithY(0));
                 if(Physics.CheckBox(p+Vector3.up*.85f,new Vector3(1,.5f,2.3f),rotation,(1<<9)|(1<<11),QueryTriggerInteraction.Ignore))continue;
@@ -116,9 +119,19 @@ namespace Padova.World
                     {
                         u.Replan=Time.time+2.5f;u.Path.Clear();u.Next=0;
                         var lanes=Net.DriveRoute(t.position,target);u.Path.AddRange(Net.Along(lanes,8));u.Path.Add(target);
+                        // The route starts at the nearest junction, which may be behind the car: resume from the closest point instead.
+                        float best=float.MaxValue;for(int k=0;k<u.Path.Count;k++){float e=Flat(t.position,u.Path[k]);if(e<best){best=e;u.Next=k;}}
                     }
-                    while(u.Next<u.Path.Count-1 && Flat(t.position,u.Path[u.Next])<9)u.Next++;
+                    float lookahead=6+car.Speed*.45f;
+                    while(u.Next<u.Path.Count-1 && Flat(t.position,u.Path[u.Next])<lookahead)u.Next++;
                     aim=u.Path[u.Next];
+                }
+                // Overtake a traffic car in the way: aim into the opposite lane, or the right if a wall is on the left.
+                if(d>BustDistance && Physics.BoxCast(t.position+Vector3.up*.8f+t.forward*2.4f,new Vector3(.8f,.4f,.2f),t.forward,out var block,t.rotation,10,1<<11,QueryTriggerInteraction.Ignore)
+                    && block.rigidbody && block.rigidbody.isKinematic)
+                {
+                    var side=-t.right;if(Physics.Raycast(t.position+Vector3.up,side,4,1<<9,QueryTriggerInteraction.Ignore))side=t.right;
+                    aim=block.point+t.forward*6+side*3.4f;
                 }
                 var local=t.InverseTransformPoint(aim);float angle=Mathf.Atan2(local.x,local.z)*Mathf.Rad2Deg;
                 float steer=Mathf.Clamp(angle/30,-1,1),limit=Mathf.Lerp(car.TopSpeed,7,Mathf.InverseLerp(10,80,Mathf.Abs(angle)));
@@ -131,30 +144,33 @@ namespace Padova.World
                 u.Stuck=!reversing && limit>1 && car.Speed<1?u.Stuck+dt:0;
                 if(u.Stuck>1.5f){u.Stuck=0;u.ReverseUntil=Time.time+1.2f;u.Replan=0;}
                 u.Lost=d>380 || t.up.y<.3f?u.Lost+dt:0;
-                if(u.Lost>3){Destroy(car.gameObject);Units.RemoveAt(i);}
+                // A slow patrol that has not closed in by 5 m for 6 s is wedged somewhere; replace it from out of view.
+                if(d<u.Closest-5){u.Closest=d;u.Stalled=0;}else if(d>BustDistance*2 && car.Speed<2)u.Stalled+=dt;
+                // Wedged or lost: replace it at once from a closer, out-of-view lane (90–160 m).
+                if(u.Stalled>6||u.Lost>3){Destroy(car.gameObject);Units.RemoveAt(i);Spawn(90,160);}
             }
         }
         public IEnumerable<Vector3> Positions{get{foreach(var u in Units)yield return u.Car.transform.position;}}
         static float Flat(Vector3 a,Vector3 b)=>Vector2.Distance(new Vector2(a.x,a.z),new Vector2(b.x,b.z));
-        static void Panel(Rect r,Color c){var old=GUI.color;GUI.color=c;GUI.DrawTexture(r,Texture2D.whiteTexture);GUI.color=old;}
         void OnGUI()
         {
-            if(!Game || Game.MapOpen || Wanted==0 && Time.unscaledTime>bannerUntil)return;
-            if(title==null)
-            {
-                GUIStyle S(int size,Color color,FontStyle weight=FontStyle.Normal){var s=new GUIStyle(GUI.skin.label){fontSize=size,fontStyle=weight};s.normal.textColor=color;return s;}
-                title=S(22,new Color(1,.86f,.3f),FontStyle.Bold);body2=S(16,Color.white);small=S(13,new Color(.82f,.86f,.85f));
-            }
-            var old=GUI.matrix;GUI.matrix=Matrix4x4.Scale(new Vector3(Screen.width/1600f,Screen.height/1000f,1));var ink=new Color(.035f,.07f,.09f,.90f);
+            float since=Time.unscaledTime-bannerAt;
+            if(!Game || Game.MapOpen || Wanted==0 && since>4)return;
+            var old=GUI.matrix;Hud.Begin();
             if(Wanted>0)
             {
-                Panel(new Rect(1320,280,252,92),ink);
-                GUI.Label(new Rect(1340,288,230,30),"WANTED  "+new string('★',Wanted)+new string('☆',MaxWanted-Wanted),title);
-                GUI.Label(new Rect(1340,318,230,24),Nearest>LoseDistance?"Out of sight · "+Mathf.CeilToInt(EvadeSeconds-Evade)+" s":"Police "+(Nearest<9999?Mathf.RoundToInt(Nearest)+" m":"on the way"),body2);
-                Panel(new Rect(1340,348,212,6),new Color(1,1,1,.15f));Panel(new Rect(1340,348,212*Evade/EvadeSeconds,6),new Color(.3f,.9f,.55f));
-                if(BustTimer>0)Panel(new Rect(1340,358,212*BustTimer/BustSeconds,5),new Color(1,.25f,.2f));
+                // Stars under the wallet; they flash while the patrols have lost sight of you.
+                bool hidden=Nearest>LoseDistance&&!responding;float flash=hidden&&Mathf.Repeat(Time.unscaledTime,.6f)<.3f?.45f:1;
+                for(int i=0;i<MaxWanted;i++)
+                {
+                    var r=new Rect(1570-(MaxWanted-i)*44,74,44,44);
+                    Hud.Text(r,"★",40,i<Wanted?new Color(Hud.Gold.r,Hud.Gold.g,Hud.Gold.b,flash):new Color(1,1,1,.25f),TextAnchor.MiddleCenter);
+                }
+                Hud.Text(new Rect(1170,118,400,26),hidden?"OUT OF SIGHT  "+Mathf.CeilToInt(EvadeSeconds-Evade)+" s":responding&&Nearest>LoseDistance?"POLICE RESPONDING":Nearest<9999?"POLICE  "+Mathf.RoundToInt(Nearest)+" M":"POLICE INCOMING",22,hidden?Hud.Money:Hud.Danger,TextAnchor.UpperRight,false,true);
+                if(hidden)Hud.Bar(new Rect(1400,146,170,7),Evade/EvadeSeconds,Hud.Money);
+                if(BustTimer>0){Hud.Text(new Rect(200,690,1200,40),"MOVE! The police are boxing you in",30,Hud.Danger,TextAnchor.MiddleCenter,true);Hud.Bar(new Rect(650,734,300,8),BustTimer/BustSeconds,Hud.Danger);}
             }
-            if(Time.unscaledTime<bannerUntil){Panel(new Rect(560,330,480,70),ink);GUI.Label(new Rect(580,348,440,36),banner,title);}
+            if(since<4)Hud.Banner(bannerTitle,bannerSubtitle,bannerColor,since);
             GUI.matrix=old;
         }
     }
