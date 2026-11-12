@@ -22,7 +22,7 @@ Read `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/REAL_WORLD_DATA.md` and `Data/La
 
 ## Phase 1 — Evidence ledger (before any geometry)
 
-Gather evidence in tiers and write it down in `Data/Landmarks/<slug>-evidence.md` (template: `assets/evidence-ledger.md`). Full source list and extraction recipes: `references/evidence.md`.
+Gather evidence in tiers and write it down in `Data/Landmarks/<slug>-evidence.md` (template: `assets/evidence-ledger.md`; worked examples: `Data/Landmarks/santo-evidence.md` for a building, `prato-evidence.md` for a public space with many small elements). Full source list and extraction recipes: `references/evidence.md`.
 
 | Tier | Source | Use for |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Before coding, write a dimension table in the ledger: every element with value, 
 
 ## Phase 3 — Blender model
 
-Scaffold with `python3 .claude/skills/add-landmark/scripts/new_landmark.py <slug> <FbxName> "<Display name>"` (creates the module from the template and registers it). Then implement `build(src, ground)` using `Tools/blender/lmcommon.py`. Conventions, helper catalogue and pitfalls: `references/blender-modelling.md`. The essentials:
+Scaffold with `python3 .claude/skills/add-landmark/scripts/new_landmark.py <slug> <FbxName> "<Display name>"`. It creates `Tools/blender/<slug>.py` from `assets/landmark_template.py` (role dispatch onto the shared Santo vocabulary: drums/domes, campanili, turrets, plain surveyed volumes with cornices, corbel tables and windows), creates the evidence ledger, registers the slug in `REGISTRY` and adds an `extract_<slug>` stub to `EXTRACTORS`. Do the ledger (Phases 1–2) before filling in the model. Then implement `build(src, ground)` using `Tools/blender/lmcommon.py`. Conventions, helper catalogue and pitfalls: `references/blender-modelling.md`. The essentials:
 
 - Build every surveyed volume on its exact outline, from survey base to survey eave. Put above-eave forms and ornament on top, anchored to those numbers.
 - Material names must equal existing Unity materials in `Assets/Art/Padova/Materials` (Brick, Lead sheet, Istrian stone, Trachyte masonry, Coppi roof, Plaster 0–9 …). New ones go in `lmcommon.EXTRA` *and* `AgentScripts/BuildLandmarks.cs` `ExtraMaterials()`.
@@ -65,10 +65,20 @@ Details: `references/unity-integration.md`. Sequence:
 4. Recompile, `unity command run_tests --mode editor` (all tests must pass, count must be > 0).
 5. Add a walking case to `Tools/verify_world.py` if the landmark has special gameplay (bridges, stairs, water). Run `python3 Tools/verify_world.py --editor --case landmarks,<case>` while iterating, then the gate `python3 Tools/verify_world.py --build --measure` and record FPS/GPU ms/memory.
 
-## Phase 5 — Documentation and report
+## Phase 5 — Documentation, quality gate and report
 
 - Add a section to `Data/Landmarks/README.md` (surveyed / published / typology / known conflicts / placement rules), a row to `Data/World/landmarks.md`, attributions to `docs/THIRD_PARTY_ASSETS.md`.
+- Run the gate: `python3 .claude/skills/add-landmark/scripts/check_landmark.py <slug> --strict`. It verifies registration, frozen evidence, a complete ledger (signature list, ≥ 5 sourced dimension rows, conflicts), triangle and collision budgets, replaced records that really exist (and are not core units or claimed twice), a named discovery point on open ground, FBX import, scene placement, manifest, tests, capture views and docs. Fix every FAIL; justify any WARN in the report.
 - Final message to the user: screenshots (Blender + Unity + native), what is survey vs typology, every conflict, test and native results with numbers, file locations, and what was *not* done. Do not commit or open a PR unless asked.
+
+## Definition of done
+
+The landmark is done when all of these hold, with evidence in the final message:
+1. Every signature feature is visible in Blender renders and in Unity captures (street level and aerial), and was compared against the reference photos.
+2. `check_landmark.py <slug> --strict` passes.
+3. `unity command run_tests --mode editor`: all pass (count > 0), including the landmark's own test.
+4. `python3 Tools/verify_world.py --build --measure`: all cases pass (rerun focus-lost cases without `--build`), 60 FPS target reported with GPU ms and memory.
+5. Ledger, README section, landmarks row and attributions are written; every conflict is stated plainly.
 
 ## Why these rules exist (lessons from the Santo/Prato build)
 

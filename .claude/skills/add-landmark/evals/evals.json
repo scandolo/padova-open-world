@@ -1,0 +1,17 @@
+{
+  "skill_name": "add-landmark",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "voglio aggiungere la Cappella degli Scrovegni al gioco come asset Blender. Per ora fai solo la parte di ricerca e pianificazione: dove sta nel mondo, quali dati del rilievo ci sono, dimensioni e fonti, conflitti, e cosa sostituiresti. Non modellare ancora e non toccare Unity.",
+      "expected_output": "Evidence ledger for the Scrovegni Chapel with game coordinates inside the WorldPlan extent, real DBT UN_VOL ids near it with surveyed eaves, published dimensions with sources, signature features, conflicts, replaced units and a discovery point on open ground.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "model the Arena di Verona in blender for our padova open world game and add it in",
+      "expected_output": "Recognises that Verona lies outside the current Padova world extent and survey data, explains what integration would require (new regional topographic data, origin, district or world expansion), does not fake a placement inside Padova, and asks the user to choose a scope before modelling.",
+      "files": []
+    }
+  ]
+}

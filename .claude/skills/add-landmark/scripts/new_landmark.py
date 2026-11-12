@@ -31,3 +31,9 @@ text = text.replace("# Register new landmarks here", stub + "# Register new land
 text = re.sub(r"EXTRACTORS = \{(.*?)\}", lambda m: 'EXTRACTORS = {%s, "%s": extract_%s}' % (m.group(1), slug, slug), text, count=1)
 extract.write_text(text)
 print("created", module.relative_to(ROOT), ledger.relative_to(ROOT), "; registered", slug)
+print("""Next:
+ 1. Fill Data/Landmarks/%(s)s-evidence.md (Phase 1-2) before modelling.
+ 2. Implement extract_%(s)s in Tools/landmarks/extract_sources.py (roles per unit), run it with .context/geo-venv/bin/python.
+ 3. Model in Tools/blender/%(s)s.py; build with --render and compare renders to the reference photos.
+ 4. Unity: BuildLandmarks.Build, CaptureViews entries, a %(n)s test in LandmarkModelTests.cs, run_tests, verify_world.py.
+ 5. Docs, then: python3 .claude/skills/add-landmark/scripts/check_landmark.py %(s)s --strict""" % {"s": slug, "n": fbx})
