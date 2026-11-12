@@ -88,7 +88,7 @@ namespace Padova.World
         {
             var g=Game;g.SetMap(false);
             if(g.Mode=="fly")g.EndFlight();if(g.Mode=="drive"){g.Driving.ResetCar();g.ExitCar();}
-            if(name=="reset"){g.Player.Respawn();g.HasWaypoint=false;}
+            if(name=="reset"){g.Player.Respawn();g.HasWaypoint=false;System.Array.Clear(g.Visited,0,g.Visited.Length);g.Discoveries=0;}
             else if(name=="car")
             {
                 var car=g.Cars[0];car.ResetCar();var p=car.transform.position+car.transform.right*2.2f;

@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import signal
 import subprocess
 import time
 import verify_survey as pipeline
@@ -20,6 +21,32 @@ DESCRIPTOR=APP/'.unity-pipeline-runtime-port'
 def descriptor():
     try:return json.loads(DESCRIPTOR.read_text())
     except (FileNotFoundError,json.JSONDecodeError):return {}
+
+class HiddenPlayer:
+    """--headless: LaunchServices starts the Player hidden and in the background (open -g -j). It renders normally,
+    including the IMGUI HUD, but no window reaches the screen and focus never moves. Popen-like for main()."""
+    def __init__(self,args):
+        DESCRIPTOR.unlink(missing_ok=True)
+        subprocess.run(['open','-g','-j','-n','-a',str(APP),'--args',*args],check=True)
+        end=time.monotonic()+45
+        while not descriptor().get('pid'):
+            if time.monotonic()>end:raise TimeoutError('Hidden Player did not expose its runtime')
+            time.sleep(.1)
+        self.pid=descriptor()['pid']
+    def poll(self):
+        try:os.kill(self.pid,0)
+        except ProcessLookupError:return 0
+        return None
+    def _signal(self,sig):
+        try:os.kill(self.pid,sig)
+        except ProcessLookupError:pass
+    def terminate(self):self._signal(signal.SIGTERM)
+    def kill(self):self._signal(signal.SIGKILL)
+    def wait(self,timeout=None):
+        end=time.monotonic()+(timeout if timeout is not None else 1e9)
+        while self.poll() is None:
+            if time.monotonic()>end:raise subprocess.TimeoutExpired('Player',timeout)
+            time.sleep(.1)
 
 def close_previous_player():
     info=descriptor()
@@ -198,8 +225,8 @@ def main(args):
         status=pipeline.command('editor_status',runtime=False)
         if status.get('playMode')!='playing':pipeline.command('editor_play',runtime=False)
     else:
-        # --headless: -batchmode opens no window and takes no focus; the game still renders through Metal on request.
-        player=subprocess.Popen([str(APP/'Contents/MacOS/padova-open-world'),*(['-batchmode'] if headless else []),'-screen-fullscreen','0','-screen-width','1600','-screen-height','1000','-logFile',str(ROOT/'.context/playable-player.log')],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
+        launch=['-screen-fullscreen','0','-screen-width','1600','-screen-height','1000','-logFile',str(ROOT/'.context/playable-player.log')]
+        player=HiddenPlayer(launch) if headless else subprocess.Popen([str(APP/'Contents/MacOS/padova-open-world'),*launch],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
     begun=time.monotonic()
     try:
         deadline=time.monotonic()+45
@@ -217,7 +244,7 @@ def main(args):
         assert s['scene']=='PadovaPlayable',s
         if player:
             report.update(playerPid=player.pid,buildGuid=descriptor().get('buildGuid'))
-            if getattr(args,'ignore_focus',False):
+            if headless or getattr(args,'ignore_focus',False):
                 call('gameplay_focus_policy','--ignore','true');report['focusPolicy']='IgnoreFocus (QA only, in memory)'
             if not headless:subprocess.run(['open','-a',str(APP)],check=True)
             focus_end=time.monotonic()+5
@@ -254,7 +281,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true')
     p.add_argument('--measure',action='store_true')
-    p.add_argument('--headless',action='store_true',help='Run the native Player with -batchmode: no window, no focus stealing; screenshots exclude the HUD')
+    p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change')
     p.add_argument('--case',default='animation,controls,locomotion,jump,objective,collision,recovery,visual')
     args=p.parse_args()
     if args.editor and args.build:p.error('--editor and --build are separate gates')
