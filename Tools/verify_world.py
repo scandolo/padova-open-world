@@ -163,9 +163,14 @@ def activity_case(name):
             busted=until(lambda s:s['busts']==1,90)
             assert busted['wanted']==0 and busted['mode']=='walk',busted
             screenshot=v.capture('world/police-busted-native.png')
-            # Second theft: drive at the patrols' worst position and wait out the evasion timer.
-            steal();until(lambda s:s['police']>=1,20)
-            v.call('activity_fixture','--name','flee');escaped=until(lambda s:s['escapes']==1,40)
+            # Second theft: once a patrol closes in, keep getting away (each flee moves the car to the lane farthest from
+            # every patrol, standing in for driving) until the evasion timer runs out. A parked car is always found.
+            steal();until(lambda s:s['police']>=1 and 0<=s['policeNearest']<110,45)
+            end=time.monotonic()+60
+            while True:
+                v.call('activity_fixture','--name','flee');time.sleep(2);escaped=state()
+                if escaped['escapes']==1:break
+                if time.monotonic()>end:raise AssertionError(('No escape while fleeing',escaped))
             assert escaped['wanted']==0,escaped
             v.press('E');until(lambda s:s['mode']=='walk',6)
             return {'firstSpawnMetres':chased['policeNearest'],'fineEuros':start['money']-busted['money'],'escaped':True,'screenshot':screenshot,

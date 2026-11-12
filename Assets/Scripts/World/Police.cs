@@ -10,8 +10,8 @@ namespace Padova.World
     {
         public OpenWorld Game;public CityTraffic Traffic;public Activities Activities;public Material LightMaterial;
         public int Wanted,Busts,Escapes,Spawned;public float Evade,BustTimer;
-        public const int MaxWanted=3;public const float EvadeSeconds=15,LoseDistance=110,BustDistance=9,BustSeconds=2.5f;
-        public sealed class Unit{public CityCar Car;public readonly List<Vector3> Path=new();public int Next;public float Replan,Stuck,ReverseUntil,Lost,Closest=float.MaxValue,Stalled;public Renderer[] Lights;}
+        public const int MaxWanted=3;public const float EvadeSeconds=15,LoseDistance=110,BustDistance=9,BustSeconds=2.5f,PhaseDistance=60;
+        public sealed class Unit{public CityCar Car;public readonly List<Vector3> Path=new();public int Next;public float Replan,Stuck,ReverseUntil,Lost,Closest=float.MaxValue,Stalled,GhostUntil;public Renderer[] Lights;public readonly HashSet<Collider> Ghosted=new();}
         public readonly List<Unit> Units=new();
         public float Nearest{get;private set;}=float.MaxValue;
         bool responding;float respondUntil;
@@ -72,10 +72,11 @@ namespace Padova.World
             Banner("BUSTED","Fine €"+fine,Hud.Danger);
         }
         void Banner(string title,string subtitle,Color color){bannerTitle=title;bannerSubtitle=subtitle;bannerColor=color;bannerAt=Time.unscaledTime;Game.Notify(title+(subtitle!=""?" · "+subtitle:""));}
-        /// <summary>A patrol appears on a lane 120–240 m away, out of the camera's close view when possible.</summary>
+        /// <summary>A patrol appears on a lane 120–240 m away, out of the camera's close view when possible, and preferably
+        /// where the drive to the player is short: across the river or against one-way streets the road route can be several times longer.</summary>
         void Spawn(float near=120,float far=240)
         {
-            var focus=Game.Position;var camera=Camera.main;
+            var focus=Game.Position;var camera=Camera.main;int routed=0;
             for(int attempt=0;attempt<50;attempt++)
             {
                 int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<20||!Net.Open(lane))continue;
@@ -84,6 +85,7 @@ namespace Padova.World
                 if(camera && attempt<35){var vp=camera.WorldToViewportPoint(p);if(vp.z>0&&vp.x>0&&vp.x<1&&vp.y>0&&vp.y<1)continue;}
                 var rotation=Quaternion.LookRotation(tangent.WithY(0));
                 if(Physics.CheckBox(p+Vector3.up*.85f,new Vector3(1,.5f,2.3f),rotation,(1<<9)|(1<<11),QueryTriggerInteraction.Ignore))continue;
+                if(routed++<12 && Net.Length(Net.DriveRoute(p,focus))>far*1.6f)continue;
                 Create(p+Vector3.up*.3f,rotation);return;
             }
         }
@@ -108,6 +110,9 @@ namespace Padova.World
             for(int i=Units.Count-1;i>=0;i--)
             {
                 var u=Units[i];var car=u.Car;var t=car.transform;float d=Flat(t.position,target);
+                // Away from the player patrols drive through traffic: queues behind pedestrians and head-on meetings in narrow
+                // streets would otherwise stall the chase out of view. Close by they collide, passing through only when wedged.
+                bool phasing=d>PhaseDistance||Time.time<u.GhostUntil;Phase(u,phasing);
                 if(Wanted==0){car.AutoThrottle=0;car.AutoSteer=0;car.AutoBrake=true;continue;}
                 car.TopSpeed=24+Wanted*2;
                 // Close and in sight: drive straight at the player. Otherwise follow the shortest road route.
@@ -127,7 +132,7 @@ namespace Padova.World
                     aim=u.Path[u.Next];
                 }
                 // Overtake a traffic car in the way: aim into the opposite lane, or the right if a wall is on the left.
-                if(d>BustDistance && Physics.BoxCast(t.position+Vector3.up*.8f+t.forward*2.4f,new Vector3(.8f,.4f,.2f),t.forward,out var block,t.rotation,10,1<<11,QueryTriggerInteraction.Ignore)
+                if(!phasing && d>BustDistance && Physics.BoxCast(t.position+Vector3.up*.8f+t.forward*2.4f,new Vector3(.8f,.4f,.2f),t.forward,out var block,t.rotation,10,1<<11,QueryTriggerInteraction.Ignore)
                     && block.rigidbody && block.rigidbody.isKinematic)
                 {
                     var side=-t.right;if(Physics.Raycast(t.position+Vector3.up,side,4,1<<9,QueryTriggerInteraction.Ignore))side=t.right;
@@ -142,13 +147,32 @@ namespace Padova.World
                 else{car.AutoSteer=steer;car.AutoBrake=car.Speed>limit+3;car.AutoThrottle=car.Speed<limit?1:0;}
                 // Stuck against a wall or car: back off briefly, then try again.
                 u.Stuck=!reversing && limit>1 && car.Speed<1?u.Stuck+dt:0;
-                if(u.Stuck>1.5f){u.Stuck=0;u.ReverseUntil=Time.time+1.2f;u.Replan=0;}
+                if(u.Stuck>1.5f){u.Stuck=0;if(TrafficAround(t))u.GhostUntil=Time.time+3;else u.ReverseUntil=Time.time+1.2f;u.Replan=0;}
                 u.Lost=d>380 || t.up.y<.3f?u.Lost+dt:0;
                 // A slow patrol that has not closed in by 5 m for 6 s is wedged somewhere; replace it from out of view.
                 if(d<u.Closest-5){u.Closest=d;u.Stalled=0;}else if(d>BustDistance*2 && car.Speed<2)u.Stalled+=dt;
                 // Wedged or lost: replace it at once from a closer, out-of-view lane (90–160 m).
                 if(u.Stalled>6||u.Lost>3){Destroy(car.gameObject);Units.RemoveAt(i);Spawn(90,160);}
             }
+        }
+        /// <summary>Turns collisions between a patrol and every traffic, parked or abandoned car off or back on; never the car the player drives.</summary>
+        void Phase(Unit u,bool on)
+        {
+            var own=u.Car.GetComponent<BoxCollider>();var driven=Game.Mode=="drive"&&Game.Driving?Game.Driving.GetComponent<BoxCollider>():null;
+            if(on)
+            {
+                foreach(var v in Traffic.Vehicles)Ignore(u,own,v.Go.GetComponent<BoxCollider>());
+                foreach(var car in Game.Cars)if(car)Ignore(u,own,car.GetComponent<BoxCollider>());
+                if(driven && u.Ghosted.Remove(driven))Physics.IgnoreCollision(own,driven,false);
+            }
+            else if(u.Ghosted.Count>0){foreach(var c in u.Ghosted)if(c)Physics.IgnoreCollision(own,c,false);u.Ghosted.Clear();}
+            void Ignore(Unit unit,Collider self,Collider other){if(other&&other!=driven&&unit.Ghosted.Add(other))Physics.IgnoreCollision(self,other,true);}
+        }
+        static bool TrafficAround(Transform t)
+        {
+            foreach(var c in Physics.OverlapBox(t.position+Vector3.up*.8f+t.forward*1.5f,new Vector3(1.4f,.6f,3.6f),t.rotation,1<<11,QueryTriggerInteraction.Ignore))
+                if(c.attachedRigidbody && c.attachedRigidbody.isKinematic)return true;
+            return false;
         }
         public IEnumerable<Vector3> Positions{get{foreach(var u in Units)yield return u.Car.transform.position;}}
         static float Flat(Vector3 a,Vector3 b)=>Vector2.Distance(new Vector2(a.x,a.z),new Vector2(b.x,b.z));

@@ -130,7 +130,8 @@ namespace Padova.World
             for(int i=0;i<Network.Lanes.Count;i++)
             {
                 var l=Network.Lanes[i];
-                for(float s=4;s<l.Length-4 && !Network.Closed[i];s+=4)
+                // Whole length: pinch points at junctions and alley entrances sit within the first and last metres of a lane.
+                for(float s=1;s<l.Length-1 && !Network.Closed[i];s+=2)
                 {
                     var p=Network.Sample(i,s,out var tangent);if(tangent.WithY(0).sqrMagnitude<.001f)continue;
                     if(Physics.CheckBox(p+Vector3.up*.9f,new Vector3(.85f,.45f,1),Quaternion.LookRotation(tangent.WithY(0)),1<<9,QueryTriggerInteraction.Ignore)){Network.Closed[i]=true;ClosedLanes++;}
