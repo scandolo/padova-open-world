@@ -90,7 +90,7 @@ The Development Player is launched through LaunchServices hidden and in the back
 
 Do not use `-batchmode` for gameplay QA: a batchmode Player never calls `OnGUI`, so the HUD is missing and HUD-side state (for example the current street name) never updates.
 
-Verified on 2026-11-12 with a fresh build: 24/24 EditMode tests and two consecutive full `verify_world.py --headless --measure` runs, 18/18 cases each, in the default order. A window sampler (`CGWindowListCopyWindowInfo`, every 0.5 s, 615 samples) never saw a game window, and the frontmost app stayed the user's. Hidden-run frame timings are not the 20-minute M4 Air benchmark; keep that as a visible run.
+Verified on 2026-11-12: 24/24 EditMode tests; full `verify_world.py --headless --measure` runs passed 18/18 cases in the default order (three of four runs; the other failed once in `car`, which then passed 16/16 reruns, cause not identified). Window samplers (`CGWindowListCopyWindowInfo`, every 0.25–0.5 s) never saw a game window, and the frontmost app stayed the user's. Hidden-run frame timings are not the 20-minute M4 Air benchmark; keep that as a visible run.
 
 `--build` also needs an Editor. For no Editor window either, start it in batchmode from the project root and leave it running; Pipeline's Editor server answers as usual (`unity status`, `build`, `run_tests`):
 
