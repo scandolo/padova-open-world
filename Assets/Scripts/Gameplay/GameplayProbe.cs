@@ -101,14 +101,15 @@ namespace Padova.Gameplay
         static void RenderCamera(string path)
         {
             var cam=Camera.main;if(!cam)throw new InvalidOperationException("No main camera to capture.");
-            int w=Screen.width>0?Screen.width:1600,h=Screen.height>0?Screen.height:1000;
+            // Batchmode ignores -screen-width/-height (Screen reports 640×480), so capture at the HUD's 1600×1000 canvas.
+            const int w=1600,h=1000;cam.aspect=(float)w/h;
             var rt=RenderTexture.GetTemporary(w,h,24,RenderTextureFormat.ARGB32);
             var request=new UnityEngine.Rendering.RenderPipeline.StandardRequest{destination=rt};
             if(UnityEngine.Rendering.RenderPipeline.SupportsRenderRequest(cam,request))UnityEngine.Rendering.RenderPipeline.SubmitRenderRequest(cam,request);
             else{var old=cam.targetTexture;cam.targetTexture=rt;cam.Render();cam.targetTexture=old;}
             var active=RenderTexture.active;RenderTexture.active=rt;
             var tex=new Texture2D(w,h,TextureFormat.RGB24,false);tex.ReadPixels(new Rect(0,0,w,h),0,0);tex.Apply();
-            RenderTexture.active=active;RenderTexture.ReleaseTemporary(rt);
+            RenderTexture.active=active;RenderTexture.ReleaseTemporary(rt);cam.ResetAspect();
             File.WriteAllBytes(path,tex.EncodeToPNG());UnityEngine.Object.Destroy(tex);
         }
         [CliCommand("gameplay_grounding", "Measure the animated mesh sole against the actual collision surface.")]
