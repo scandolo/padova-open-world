@@ -1,21 +1,29 @@
 # <Landmark> evidence ledger (<slug>)
 
-Location: lon, lat → game x, z. Inside WorldPlan extent: yes/no. Survey units: ...
+<!-- Fill every section before modelling. Worked examples: Data/Landmarks/santo-evidence.md, prato-evidence.md.
+     Tiers: survey (DBT) > mapped (OSM) > published (official, Wikipedia it, catalogues) > photo (ratio from a
+     named photograph, anchored to a surveyed or published number) > typology (game vocabulary, unmeasured).
+     Delete these comments when done; check_landmark.py rejects leftover placeholders. -->
 
-## Signature features (must be visible in the model)
-- ...
+Location: <lon> E, <lat> N → game x <x>, z <z> (<anchor record>). Inside WorldPlan extent: <yes/no>. Survey records: <ids>. Frozen in `sources.json["<slug>"]`.
+
+## Signature features
+<!-- 3–10 features that make the landmark recognisable; the model must show every one. -->
+- <feature>
 
 ## Dimension table
-| Element | Value | Tier (survey/mapped/published/photo/typology) | Source | Derivation |
+| Element | Value | Tier | Source | Derivation |
 | --- | --- | --- | --- | --- |
-| Footprint, eaves | DBT | survey | UN_VOL:... | exact |
+| <footprints, eaves, bases> | <exact / m> | survey | <DBT layer:id> | <QGR − 15, …> |
 
 ## Counts
-| Item | Count | Sources (2 if possible) |
+| Item | Count | Sources |
 | --- | --- | --- |
+| <domes, arches, statues …> | <n> | <two sources where possible> |
 
 ## Conflicts and decisions
-- ...
+<!-- Every disagreement between tiers, what was kept, and how it will look. Write "None found" if truly none. -->
+- <conflict>
 
 ## Reference photos (drawing reference only)
-- Commons file names, licence, local path in .context/landmarks-ref/
+- <Commons file names, licences, local copies in .context/landmarks-ref/>
