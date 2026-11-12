@@ -78,6 +78,29 @@ The Player also exposes `simulate_pointer`, `set_target_framerate`, logs, C# eva
 
 A normal macOS release build was also verified to succeed. It did not contain `Unity.Pipeline.dll`, `Unity.Pipeline.IlInterpreter.dll`, or a runtime port descriptor. The small `Unity.Pipeline.Attributes.dll` metadata assembly remained in the output; it is not the command server. Do not ship the Development Player used for agent testing.
 
+## 3b. Headless runs (no window, no focus stealing)
+
+Use `--headless` with `verify_playable.py` or `verify_world.py` whenever a person is using the Mac:
+
+```sh
+python3 Tools/verify_world.py --headless --build --measure
+```
+
+The Development Player starts with `-batchmode`: it opens no window, does not appear on screen and never takes focus. It still creates the Metal device on the Mac's GPU, runs at 60 FPS and accepts Pipeline key/pointer input; the Player reports itself as focused, so the focus gates pass without `--ignore-focus`. In batchmode, cameras do not render on their own, so `gameplay_capture` renders `Camera.main` into a RenderTexture (`GameplayProbe.RenderCamera`) instead of `ScreenCapture`. Screenshots show the 3D world but **not the IMGUI HUD** (minimap, speedometer, banners); check HUD values through the probe state, and use a normal windowed run when the HUD itself must be seen. Frame timings without on-screen presentation are not a performance benchmark; keep the 20-minute M4 Air measurement as a windowed run.
+
+Verified on 2026-11-12, against the 2026-10-12 build, with captures injected through `eval_file` because that build predates `RenderCamera`. All world cases passed headless except `police`, which also failed in the windowed run of 2026-10-12. A window sampler (`CGWindowListCopyWindowInfo`, every 0.5 s) saw no game window. Run `landmarks` and `santo` in separate invocations: `landmarks` already discovers the Santo, so `santo` then waits for a discovery that never comes.
+
+`--build` also needs an Editor. For no Editor window either, start it in batchmode from the project root and leave it running; Pipeline's Editor server answers as usual (`unity status`, `build`, `run_tests`):
+
+```sh
+/Applications/Unity/Hub/Editor/6000.3.25f1/Unity.app/Contents/MacOS/Unity \
+  -batchmode -projectPath "$PWD" -logFile "$PWD/.context/unity-editor.log" &
+```
+
+A batchmode Editor exits at startup with `No valid Unity Editor license found` / `'com.unity.editor.headless' was not found` when no licence is active (check `unity license status --format json`: `active` must be true). Sign in and activate Unity Personal through Unity Hub, then retry. `capture_game_view` needs a Game view window and does not work in a batchmode Editor; use `AgentScripts/CaptureViews.cs` or a headless Player instead. One Editor may hold a project at a time, so give parallel agents their own worktree (clone `Library/` with `cp -cR`).
+
+Agent outputs: `.context/playable-verification.json` (pass/fail, state, performance samples), PNGs under `.context/world/` and `.context/padova-*.png` (including `padova-failure.png` on failure), `.context/playable-player.log` (Player log) and `.context/unity-editor.log` (Editor log).
+
 ## 4. Interpreting results
 
 - Editor tests: require explicit passed counts and zero failed tests.

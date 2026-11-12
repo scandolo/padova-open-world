@@ -211,7 +211,7 @@ def activity_case(name):
 
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,traffic,taxi,race,police,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Run the native Player with -batchmode: no window, no focus stealing; screenshots exclude the HUD');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,traffic,taxi,race,police,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True

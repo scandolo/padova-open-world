@@ -174,7 +174,8 @@ def main(args):
     global EDITOR
     EDITOR=args.editor
     (ROOT/'.context').mkdir(parents=True,exist_ok=True)
-    report={'mode':'editor' if EDITOR else 'native','checks':[]}
+    headless=getattr(args,'headless',False)
+    report={'mode':'editor' if EDITOR else 'native-headless' if headless else 'native','checks':[]}
     stamp=ROOT/'.context/build/playable-source-sha256.txt'
     if not EDITOR:close_previous_player()
     if args.build:
@@ -197,7 +198,8 @@ def main(args):
         status=pipeline.command('editor_status',runtime=False)
         if status.get('playMode')!='playing':pipeline.command('editor_play',runtime=False)
     else:
-        player=subprocess.Popen([str(APP/'Contents/MacOS/padova-open-world'),'-screen-fullscreen','0','-screen-width','1600','-screen-height','1000','-logFile',str(ROOT/'.context/playable-player.log')],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
+        # --headless: -batchmode opens no window and takes no focus; the game still renders through Metal on request.
+        player=subprocess.Popen([str(APP/'Contents/MacOS/padova-open-world'),*(['-batchmode'] if headless else []),'-screen-fullscreen','0','-screen-width','1600','-screen-height','1000','-logFile',str(ROOT/'.context/playable-player.log')],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
     begun=time.monotonic()
     try:
         deadline=time.monotonic()+45
@@ -217,7 +219,7 @@ def main(args):
             report.update(playerPid=player.pid,buildGuid=descriptor().get('buildGuid'))
             if getattr(args,'ignore_focus',False):
                 call('gameplay_focus_policy','--ignore','true');report['focusPolicy']='IgnoreFocus (QA only, in memory)'
-            subprocess.run(['open','-a',str(APP)],check=True)
+            if not headless:subprocess.run(['open','-a',str(APP)],check=True)
             focus_end=time.monotonic()+5
             while not state().get('focused',False):
                 if time.monotonic()>focus_end:raise RuntimeError('Could not activate the native game window')
@@ -252,6 +254,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true')
     p.add_argument('--measure',action='store_true')
+    p.add_argument('--headless',action='store_true',help='Run the native Player with -batchmode: no window, no focus stealing; screenshots exclude the HUD')
     p.add_argument('--case',default='animation,controls,locomotion,jump,objective,collision,recovery,visual')
     args=p.parse_args()
     if args.editor and args.build:p.error('--editor and --build are separate gates')
