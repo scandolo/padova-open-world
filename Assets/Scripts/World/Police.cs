@@ -15,7 +15,7 @@ namespace Padova.World
         public readonly List<Unit> Units=new();
         public float Nearest{get;private set;}=float.MaxValue;
         bool responding;float respondUntil;
-        readonly System.Random random=new(113);MaterialPropertyBlock block;
+        readonly System.Random random=new(113);readonly System.Collections.Generic.List<int> nearby=new();MaterialPropertyBlock block;
         int lastHits;CityCar watched;float heatCooldown,nextSpawn,clearedAt=-1,bannerAt=-10;string bannerTitle="",bannerSubtitle="";Color bannerColor;
         RoadNetwork Net=>Traffic?Traffic.Network:null;
         void Start()
@@ -70,10 +70,10 @@ namespace Padova.World
         /// where the drive to the player is short: across the river or against one-way streets the road route can be several times longer.</summary>
         void Spawn(float near=120,float far=240)
         {
-            var focus=Game.Position;var camera=Camera.main;int routed=0;
-            for(int attempt=0;attempt<50;attempt++)
+            var focus=Game.Position;var camera=Camera.main;int routed=0;Net.LanesNear(focus,far,nearby);
+            for(int attempt=0;attempt<50 && nearby.Count>0;attempt++)
             {
-                int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<20||!Net.Open(lane))continue;
+                int lane=nearby[random.Next(nearby.Count)];var l=Net.Lanes[lane];if(l.Length<20||!Net.Open(lane))continue;
                 var p=Net.Sample(lane,l.Length*.5f,out var tangent);float d=Flat(p,focus);
                 if(d<near||d>far)continue;
                 if(camera && attempt<35){var vp=camera.WorldToViewportPoint(p);if(vp.z>0&&vp.x>0&&vp.x<1&&vp.y>0&&vp.y<1)continue;}

@@ -18,7 +18,7 @@ namespace Padova.World
         public bool Active=>Kind!="";
         Transform beacon,nextBeacon;GameObject passenger;MaterialPropertyBlock block;float countdown,bannerAt=-10;string bannerTitle="",bannerSubtitle="";
         InputAction menuAction,taxiAction,raceAction,quitAction;bool menuRequested,taxiRequested,raceRequested,quitRequested;
-        readonly System.Random random=new(611);
+        readonly System.Random random=new(611);readonly List<int> nearby=new();
         void Awake()
         {
             InputAction Button(string binding,System.Action action){var a=new InputAction(binding,InputActionType.Button,binding);a.performed+=_=>action();a.Enable();return a;}
@@ -65,14 +65,14 @@ namespace Padova.World
         // Pick-up somewhere 150–450 m away by road, beside the kerb on the right of the lane.
         void NextFare()
         {
-            int pick=-1;
-            for(int i=0;i<60 && pick<0;i++)
+            int pick=-1;nearby.Clear();Net.LanesNear(Game.Position,450,nearby);
+            for(int i=0;i<60 && pick<0 && nearby.Count>0;i++)
             {
-                int lane=random.Next(Net.Lanes.Count);var l=Net.Lanes[lane];if(l.Length<30||!Net.Open(lane))continue;
+                int lane=nearby[random.Next(nearby.Count)];var l=Net.Lanes[lane];if(l.Length<30||!Net.Open(lane)||l.Class==Padova.City.CityRoads.Fast)continue;
                 float d=Vector3.Distance(Net.Nodes[l.From],Game.Position);if(d<150||d>450)continue;
                 if(Net.DriveRoute(Game.Position,Net.Nodes[l.From]).Count==0)continue;pick=lane;
             }
-            if(pick<0){End("No fares nearby. Try again closer to the centre.");return;}
+            if(pick<0){End("No fares around here. Try a busier street.");return;}
             float s=Net.Lanes[pick].Length*.5f;var p=Net.Sample(pick,s,out var tangent);
             var kerb=p+new Vector3(tangent.z,0,-tangent.x).normalized*2.6f;
             if(Physics.Raycast(kerb+Vector3.up*20,Vector3.down,out var hit,40,1<<8))kerb=hit.point;

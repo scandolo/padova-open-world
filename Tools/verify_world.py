@@ -246,6 +246,7 @@ def activity_case(name):
                     except AssertionError:continue
                 raise AssertionError('Could not take a traffic car')
             v.call('activity_fixture','--name','clear_police');until(lambda s:s['wanted']==0)
+            until(lambda s:s['trafficMoving']>5,40)   # traffic appears once the streamed streets have colliders
             start=steal();assert start['wanted']==1,start
             # Stay put: a patrol must find the player by road and make the arrest.
             chased=until(lambda s:s['police']>=1 and s['policeMoving']>=1,20)
