@@ -35,6 +35,90 @@ namespace Padova.City
         /// <summary>0 plain, 1 traffic signal, 2 mini-roundabout, 3 dead end.</summary>
         public byte[] NodeKind, NodeDegree;
         public RoadEdge[] Edges;
+        /// <summary>Widest carriageway meeting at each node (m).</summary>
+        public float[] NodeWidth;
+
+        /// <summary>A place where one vehicle can stand at the kerb.</summary>
+        public struct Slot
+        {
+            /// <summary>Distance along the edge from node A (m) and offset to the right of A→B from the surveyed centreline (m).</summary>
+            public float S, Side;
+            /// <summary>True when the vehicle faces A→B.</summary>
+            public bool Forward;
+            public uint Seed;
+        }
+
+        public const float BayWidth = 2.0f, BayLength = 5.6f;
+
+        /// <summary>How much of an edge near a node is kept clear of paint, lamps and parked cars (m).</summary>
+        public float Clear(int node) => NodeDegree[node] >= 3 ? Mathf.Max(5, NodeWidth[node] * .5f + 3) : 1.5f;
+
+        /// <summary>Kerbside parking on an edge, decided from its measured width: which sides of A→B hold a row of bays, and how far
+        /// the driving lanes move over (to the right of A→B, m) to make room when only one side is used. Typology, not survey.</summary>
+        public void Parking(int index, out bool right, out bool left, out float shift)
+        {
+            right = left = false; shift = 0;
+            var e = Edges[index];
+            if (e.Class != Local && e.Class != Main || e.Bridge || e.Underpass || e.Roundabout || (e.Flags & 32) != 0) return;
+            bool oneWay = e.OneWayForward || e.OneWayBackward;
+            float moving = oneWay ? 3.3f : 5.6f, w = e.Width;
+            if (e.Class == Main) moving += 1;
+            uint hash = (uint)(e.A * 7919 + e.B * 104729) * 2654435761u;
+            if (hash % 100 < 12) return;                                   // some streets simply have none
+            if (w >= moving + 2 * BayWidth + .7f) right = left = true;
+            else if (w >= moving + BayWidth)
+            {
+                right = (hash >> 8) % 2 == 0; left = !right;
+                shift = right ? -BayWidth * .5f : BayWidth * .5f;
+            }
+        }
+
+        /// <summary>Half the width traffic drives on once parking bays are taken out, and the lateral centre of that strip.</summary>
+        public float Driving(int index, out float centre)
+        {
+            Parking(index, out bool right, out bool left, out centre);
+            return (Edges[index].Width - ((right ? 1 : 0) + (left ? 1 : 0)) * BayWidth) * .5f;
+        }
+
+        /// <summary>The bays along an edge, in order from A. Positions are deterministic, so the painted bays and the parked vehicles agree.</summary>
+        public void Slots(int index, System.Collections.Generic.List<Slot> result)
+        {
+            result.Clear();
+            Parking(index, out bool right, out bool left, out _);
+            if (!right && !left) return;
+            var e = Edges[index];
+            float length = 0;
+            for (int k = 2; k + 1 < e.Points.Length; k += 2) length += Mathf.Sqrt((e.Points[k] - e.Points[k - 2]) * (e.Points[k] - e.Points[k - 2]) + (e.Points[k + 1] - e.Points[k - 1]) * (e.Points[k + 1] - e.Points[k - 1]));
+            float from = Clear(e.A) + 5, to = length - Clear(e.B) - 5;
+            int count = Mathf.FloorToInt((to - from) / BayLength);
+            if (count < 1) return;
+            bool oneWay = e.OneWayForward || e.OneWayBackward;
+            float offset = e.Width * .5f - BayWidth * .5f;
+            for (int k = 0; k < count; k++)
+            {
+                float s = from + (k + .5f) * BayLength;
+                uint seed = (uint)(index * 73856093) ^ (uint)(k * 19349663);
+                if (right) result.Add(new Slot { S = s, Side = offset, Forward = !e.OneWayBackward, Seed = seed });
+                if (left) result.Add(new Slot { S = s, Side = -offset, Forward = oneWay && e.OneWayForward, Seed = seed ^ 0x9E3779B9u });
+            }
+        }
+
+        /// <summary>Point on an edge at distance <paramref name="s"/> from A, and the direction of travel A→B there.</summary>
+        public Vector2 At(int index, float s, out Vector2 direction)
+        {
+            var pts = Edges[index].Points;
+            direction = Vector2.right;
+            var a = new Vector2(pts[0], pts[1]);
+            for (int k = 2; k + 1 < pts.Length; k += 2)
+            {
+                var b = new Vector2(pts[k], pts[k + 1]);
+                float span = Vector2.Distance(a, b);
+                if (span > 1e-4f) direction = (b - a) / span;
+                if (s <= span || k + 3 >= pts.Length) return a + direction * Mathf.Min(s, span);
+                s -= span; a = b;
+            }
+            return a;
+        }
 
         public static CityRoads Load(string path)
         {
@@ -72,6 +156,12 @@ namespace Padova.City
                 Buffer.BlockCopy(b, p, e.Points, 0, points * 8);
                 p += points * 8;
                 roads.Edges[i] = e;
+            }
+            roads.NodeWidth = new float[roads.NodeX.Length];
+            foreach (var e in roads.Edges)
+            {
+                roads.NodeWidth[e.A] = Mathf.Max(roads.NodeWidth[e.A], e.Width);
+                roads.NodeWidth[e.B] = Mathf.Max(roads.NodeWidth[e.B], e.Width);
             }
             return roads;
         }

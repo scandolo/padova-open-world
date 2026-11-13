@@ -86,9 +86,9 @@ namespace Padova.City
     public sealed class StreetInput
     {
         public RoadEdge[] Edges;
+        /// <summary>Index of each edge in the graph.</summary>
+        public int[] Indices;
         public CityRoads Graph;
-        /// <summary>Widest carriageway meeting at each node (m).</summary>
-        public float[] NodeWidth;
         /// <summary>Extent of the hand-built core district, which keeps its own street dressing.</summary>
         public float[] Core;
         public float Tile;
@@ -200,7 +200,7 @@ namespace Padova.City
         }
 
         // ------------------------------------------------------------------ streets
-        static readonly Surface Paint = new Surface(Layer.Plain, .9f, .9f, .86f);
+        static readonly Surface Paint = new Surface(Layer.Plain, .9f, .9f, .86f), BayBlue = new Surface(Layer.Plain, .2f, .42f, .78f);
         static readonly Surface LampMetal = new Surface(Layer.Plain, .16f, .17f, .18f);
         static readonly Surface LampIron = new Surface(Layer.Plain, .07f, .08f, .08f);
         static readonly Surface LampGlass = new Surface(Layer.Plain, 1f, .86f, .6f);
@@ -238,14 +238,17 @@ namespace Padova.City
                 }
                 return false;
             }
+            var paint = Paint;
             void Strip(Vector2 a, Vector2 b, float half, float lift)
             {
                 var d = (b - a).normalized; var n = new Vector2(-d.y, d.x) * half;
                 Vector3 P(Vector2 p) => new Vector3(p.x, terrain.At(p.x, p.y) + lift, p.y);
-                sink.Quad(Paint, P(a - n), P(a + n), P(b + n), P(b - n), Vector3.up, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+                sink.Quad(paint, P(a - n), P(a + n), P(b + n), P(b - n), Vector3.up, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
             }
-            foreach (var edge in input.Edges)
+            var bays = new List<CityRoads.Slot>();
+            for (int n = 0; n < input.Edges.Length; n++)
             {
+                var edge = input.Edges[n];
                 if (edge.Pedestrian || edge.Points.Length < 4) continue;
                 int count = edge.Points.Length / 2;
                 var along = new float[count];
@@ -263,9 +266,11 @@ namespace Padova.City
                 float lift = edge.Bridge ? .16f : .035f, width = edge.Width;
                 bool oneWay = edge.OneWayForward || edge.OneWayBackward, big = edge.Class >= CityRoads.Main, fast = edge.Class == CityRoads.Fast;
                 // Junctions keep clear of paint: the wider the crossing roads, the longer the gap.
-                float clearA = input.Graph.NodeDegree[edge.A] >= 3 ? Mathf.Max(5, input.NodeWidth[edge.A] * .5f + 3) : 1.5f;
-                float clearB = input.Graph.NodeDegree[edge.B] >= 3 ? Mathf.Max(5, input.NodeWidth[edge.B] * .5f + 3) : 1.5f;
+                float clearA = input.Graph.Clear(edge.A), clearB = input.Graph.Clear(edge.B);
                 if (edge.Roundabout) { clearA = clearB = .5f; }
+                // Kerbside parking narrows the strip traffic uses and moves its centre.
+                input.Graph.Parking(input.Indices[n], out bool parkRight, out bool parkLeft, out float shift);
+                Vector2 Right(Vector2 d) => new Vector2(d.y, -d.x);
                 uint seed = (uint)(edge.A * 7919 + edge.B * 104729);
                 // ---- centre line or lane divider
                 bool centre = edge.Class >= CityRoads.Local && !edge.Roundabout && (oneWay ? width >= 6.4f && edge.Lanes >= 2 : width >= 5.4f);
@@ -273,8 +278,8 @@ namespace Padova.City
                     for (float s = clearA; s + 3 <= length - clearB; s += fast ? 12 : 7.5f)
                     {
                         float dash = fast ? 4.5f : 3;
-                        var a = At(s, out _); var b = At(s + dash, out _); var m = (a + b) * .5f;
-                        if (Mine(m.x, m.y) && !Core(m.x, m.y)) Strip(a, b, .06f, lift);
+                        var a = At(s, out var da); var b = At(s + dash, out var db); var m = (a + b) * .5f;
+                        if (Mine(m.x, m.y) && !Core(m.x, m.y)) Strip(a + Right(da) * shift, b + Right(db) * shift, .06f, lift);
                     }
                 // ---- edge lines on main and fast roads
                 if (big && !edge.Roundabout && width >= 6)
@@ -285,10 +290,29 @@ namespace Padova.City
                         if (!Mine(m.x, m.y) || Core(m.x, m.y)) continue;
                         foreach (float side in new[] { -1f, 1f })
                         {
+                            if (side < 0 ? parkRight : parkLeft) continue;        // the bay line takes its place
                             float off = side * (width * .5f - .35f);
                             Strip(a + new Vector2(-da.y, da.x) * off, b + new Vector2(-db.y, db.x) * off, .06f, lift);
                         }
                     }
+                // ---- parking bays: a line along the row and a tick between vehicles
+                if (parkRight || parkLeft)
+                {
+                    input.Graph.Slots(input.Indices[n], bays);
+                    // Blue bays (pay parking) on main roads, white on residential streets.
+                    paint = big ? BayBlue : Paint;
+                    foreach (var bay in bays)
+                    {
+                        float sign = Mathf.Sign(bay.Side), inner = sign * (width * .5f - CityRoads.BayWidth), kerb = sign * (width * .5f - .15f);
+                        float s0 = bay.S - CityRoads.BayLength * .5f, s1 = bay.S + CityRoads.BayLength * .5f;
+                        var a = At(s0, out var da); var b = At(s1, out var db); var m = (a + b) * .5f;
+                        if (!Mine(m.x, m.y) || Core(m.x, m.y)) continue;
+                        Strip(a + Right(da) * inner, b + Right(db) * inner, .05f, lift);
+                        Strip(a + Right(da) * inner, a + Right(da) * kerb, .05f, lift);
+                        Strip(b + Right(db) * inner, b + Right(db) * kerb, .05f, lift);
+                    }
+                    paint = Paint;
+                }
                 // ---- zebra crossings where streets meet
                 if (edge.Class >= CityRoads.Local && !fast && !edge.Roundabout && width >= 4.6f && length > 22)
                     for (int end = 0; end < 2; end++)

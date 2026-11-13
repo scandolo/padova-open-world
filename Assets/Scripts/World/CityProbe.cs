@@ -44,6 +44,31 @@ namespace Padova.World
             };
         }
 
+        [CliCommand("city_parked", "Kerbside vehicles: how many stand around the player, were taken, knocked loose or blocked; --near 1 walks the player beside the nearest.")]
+        public static object Parked([CliArg("near", "1 puts the walking player next to the nearest parked vehicle")] int near = 0)
+        {
+            var game = Object.FindFirstObjectByType<OpenWorld>();
+            var parked = game ? game.Parked : null;
+            if (!parked) return new { ready = false };
+            var nearest = parked.NearestTo(game.Position, 400);
+            if (near > 0 && nearest && game.Mode == "walk")
+            {
+                var p = nearest.transform.position + nearest.transform.right * (nearest.Spec.Width * .5f + 1.1f);
+                if (Physics.Raycast(p + Vector3.up * 3, Vector3.down, out var hit, 8, 1 << 8)) p = hit.point + Vector3.up * .05f;
+                var controller = game.Player.GetComponent<CharacterController>();
+                controller.enabled = false; game.Player.transform.position = p; controller.enabled = true;
+                game.Player.VerticalSpeed = -1; game.Player.FollowCamera.ResetCamera();
+            }
+            return new
+            {
+                ready = true, standing = parked.Standing, taken = parked.Taken, knocked = parked.Knocked, blocked = parked.Blocked, cars = game.Cars.Length,
+                nearest = nearest ? nearest.Spec.Name : "", distance = nearest ? Vector3.Distance(nearest.transform.position, game.Position) : -1,
+                within = game.NearbyParked ? game.NearbyParked.Spec.Name : "", vehicle = game.Driving ? game.Driving.Spec.Name : "",
+                at = nearest ? new[] { nearest.transform.position.x, nearest.transform.position.y, nearest.transform.position.z } : new float[0],
+                facing = nearest ? new[] { nearest.transform.forward.x, nearest.transform.forward.z } : new float[0]
+            };
+        }
+
         [CliCommand("city_drive", "Development-only: put the car being driven on the lane nearest a point anywhere in the comune, facing along it.")]
         public static object Drive([CliArg("x", "East of the origin (m)", Required = true)] float x, [CliArg("z", "North of the origin (m)", Required = true)] float z)
         {

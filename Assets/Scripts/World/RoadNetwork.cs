@@ -79,18 +79,19 @@ namespace Padova.World
                 }
                 if(line.Count<2)continue;
                 bool oneWay=edge.OneWayForward||edge.OneWayBackward;
-                float offset=oneWay?0:Mathf.Clamp(edge.Width*.25f,.9f,1.75f);
+                // Kerbside parking leaves a narrower strip to drive on, and moves it over when only one side is parked.
+                float half=graph.Driving(e,out float centre),spread=oneWay?0:Mathf.Clamp(half*.5f,.9f,1.75f);
                 bool shut=edge.Pedestrian||edge.Width<2.9f;
                 string name=edge.Name<graph.Names.Length?graph.Names[edge.Name]:"";
-                void Lane(int from,int to)
+                void Lane(int from,int to,float offset)
                 {
                     net.Add(from,to,name,line,ground,offset,false);var lane=net.Lanes[net.Lanes.Count-1];
                     lane.Class=edge.Class;lane.Edge=e;lane.Width=edge.Width;lane.Limit=Mathf.Max(20,edge.MaxSpeed)/3.6f;lane.OneWay=oneWay;lane.Bridge=edge.Bridge;lane.Roundabout=edge.Roundabout;
                     closed.Add(shut);
                 }
-                if(!edge.OneWayBackward)Lane(edge.A,edge.B);
+                if(!edge.OneWayBackward)Lane(edge.A,edge.B,spread+centre);
                 net.TotalLength+=net.Lanes.Count>0?net.Lanes[net.Lanes.Count-1].Length:0;
-                if(!edge.OneWayForward){line.Reverse();Lane(edge.B,edge.A);}
+                if(!edge.OneWayForward){line.Reverse();Lane(edge.B,edge.A,spread-centre);}
             }
             net.Closed=closed.ToArray();net.Index();
             return net;

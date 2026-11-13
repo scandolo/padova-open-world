@@ -34,7 +34,6 @@ namespace Padova.City
 
         public CityPack Pack { get; private set; }
         CityRoads roads;
-        float[] nodeWidth;
         Dictionary<long, List<int>> roadTiles;
 
         /// <summary>Gives the streamer the road graph so tiles get lane markings, crossings and lamps. Call before tiles load.</summary>
@@ -43,12 +42,10 @@ namespace Padova.City
             roads = graph; roadTiles = null;
             if (graph == null || Pack == null) return;
             float t = Pack.Tile;
-            nodeWidth = new float[graph.NodeX.Length];
             var index = new Dictionary<long, List<int>>();
             for (int e = 0; e < graph.Edges.Length; e++)
             {
                 var edge = graph.Edges[e];
-                nodeWidth[edge.A] = Mathf.Max(nodeWidth[edge.A], edge.Width); nodeWidth[edge.B] = Mathf.Max(nodeWidth[edge.B], edge.Width);
                 long last = long.MinValue;
                 for (int k = 0; k + 3 < edge.Points.Length; k += 2)
                 {
@@ -78,7 +75,7 @@ namespace Padova.City
             if (roads == null || roadTiles == null || !roadTiles.TryGetValue(CityPack.Key(tx, tz), out var list)) return null;
             var edges = new RoadEdge[list.Count];
             for (int i = 0; i < edges.Length; i++) edges[i] = roads.Edges[list[i]];
-            return new StreetInput { Edges = edges, Graph = roads, NodeWidth = nodeWidth, Core = Pack.Index.coreExtent, Tile = Pack.Tile };
+            return new StreetInput { Edges = edges, Indices = list.ToArray(), Graph = roads, Core = Pack.Index.coreExtent, Tile = Pack.Tile };
         }
         Texture2DArray layers;
         Material runtimeMaterial, glowMaterial;

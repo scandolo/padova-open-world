@@ -26,6 +26,8 @@ namespace Padova.World
             Add<DayCycle>("Day and night");
             Add<NightLights>("Night lights").Game = game;
             Add<FarGround>("Far ground").Game = game;
+            game.Parked = Add<ParkedCars>("Parked vehicles");
+            game.Parked.Game = game;
             // Sound is built with the game reference in place before its Awake runs.
             var audio = new GameObject("City audio");
             audio.SetActive(false);

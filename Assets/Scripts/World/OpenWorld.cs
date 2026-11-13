@@ -10,6 +10,8 @@ namespace Padova.World
     {
         public ThirdPersonMotor Player;public WorldContext City;public CityCar[] Cars;public TourPlane Plane;public CityCrowd Crowd;
         public CityTraffic Traffic;public Activities Activities;public Police Police;public CityTraffic.Vehicle NearbyTraffic{get;private set;}
+        /// <summary>Kerbside vehicles around the player, and the one within reach on foot.</summary>
+        public ParkedCars Parked;public ParkedCar NearbyParked{get;private set;}
         public Texture2D MapTexture;public bool MapOpen;public string Mode="walk";
         /// <summary>Second map sheet at 1 m per pixel around the centre, and the world rectangles (x0, z0, x1, z1) both sheets cover.</summary>
         public Texture2D MapDetail;public Vector4 MapExtent=new Vector4(-1500,-1300,1500,1300),DetailExtent;
@@ -89,8 +91,9 @@ namespace Padova.World
                 return;
             }
             Nearby=null;if(Mode=="walk")foreach(var car in Cars)if(Vector3.Distance(car.transform.position,Player.transform.position)<5.5f){Nearby=car;break;}
-            NearbyTraffic=Mode=="walk" && !Nearby && Traffic?Traffic.NearestTo(Player.transform.position,5.5f):null;
-            if(interact){if(Mode=="drive")ExitCar();else if(Mode=="walk" && Nearby)EnterCar(Nearby);else if(NearbyTraffic!=null)TakeTrafficCar(NearbyTraffic);}
+            NearbyParked=Mode=="walk" && !Nearby && Parked?Parked.NearestTo(Player.transform.position,4.6f):null;
+            NearbyTraffic=Mode=="walk" && !Nearby && !NearbyParked && Traffic?Traffic.NearestTo(Player.transform.position,5.5f):null;
+            if(interact){if(Mode=="drive")ExitCar();else if(Mode=="walk" && Nearby)EnterCar(Nearby);else if(NearbyParked)TakeParked(NearbyParked);else if(NearbyTraffic!=null)TakeTrafficCar(NearbyTraffic);}
             if(flight){if(Mode=="fly")EndFlight();else LaunchFlight();}
             if(reset){if(Mode=="drive")RecoverCar();else if(Mode=="fly")EndFlight();}
             if(Mode=="drive")CrashFeedback();
@@ -156,10 +159,18 @@ namespace Padova.World
             Traffic.Release(vehicle,v=>
             {
                 var car=VehicleFactory.Drivable(v.Spec,v.Paint,v.Go.transform.position,v.Go.transform.rotation,transform);car.name=v.Spec.Label;
-                var cars=new System.Collections.Generic.List<CityCar>(Cars){car};Cars=cars.ToArray();EnterCar(car);if(Police)Police.Raise(1,"Car theft reported");
+                AddCar(car);EnterCar(car);if(Police)Police.Raise(1,"Car theft reported");
             });
             NearbyTraffic=null;
         }
+        /// <summary>A parked vehicle is there for the taking; now and then one has an alarm.</summary>
+        void TakeParked(ParkedCar parked)
+        {
+            bool alarm=parked.Key%7==0;var car=Parked.Take(parked);NearbyParked=null;if(!car)return;
+            AddCar(car);EnterCar(car);if(alarm && Police)Police.Raise(1,"Car alarm · theft reported");
+        }
+        public void AddCar(CityCar car){var cars=new System.Collections.Generic.List<CityCar>(Cars){car};Cars=cars.ToArray();}
+        public void RemoveCar(CityCar car){var cars=new System.Collections.Generic.List<CityCar>(Cars);cars.Remove(car);Cars=cars.ToArray();}
         public bool ExitCar()
         {
             if(!Driving)return false;if(Driving.Speed>4){Notify("Slow down before getting out.");return false;}
@@ -301,6 +312,7 @@ namespace Padova.World
             }
             if(Mode=="drive" && Driving.Stuck)Hud.Prompt(new Vector2(800,790),"R",Driving.transform.up.y<.35f?"Flip the car back onto its wheels":"Stuck? Put the car back on the road");
             if(Nearby && Mode=="walk")Hud.Prompt(new Vector2(800,790),"E","Drive the "+Nearby.name);
+            else if(NearbyParked && Mode=="walk")Hud.Prompt(new Vector2(800,790),"E","Take the "+NearbyParked.Spec.Label);
             else if(NearbyTraffic!=null)Hud.Prompt(new Vector2(800,790),"E","Steal the "+NearbyTraffic.Colour);
             if(ShowHelp)Help();
             Hud.Text(new Rect(34,978,1300,20),"Comune di Padova / Regione Veneto · IODL 2.0   ·   Names © OpenStreetMap · ODbL   ·   Poly Haven / Kenney · CC0   ·   Façades and street life are authored typology",12,new Color(1,1,1,.5f));

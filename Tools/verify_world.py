@@ -114,6 +114,7 @@ def run_case(name):
     if name in ['traffic','taxi','race','police']:return activity_case(name)
     if name=='drive':return drive_case()
     if name=='night':return night_case()
+    if name=='parked':return parked_case()
     if name not in ['map','car','flight','crowd','quiet_flight','santo','prato','landmarks']:
         reset();return original(name) # Leave any car or plane first: the walking cases need the character.
     reset()
@@ -221,6 +222,20 @@ def wait(fetch,predicate,timeout=15):
         if predicate(s):return s
         if time.monotonic()>end:raise AssertionError(('Condition timed out',s))
         time.sleep(.1)
+
+def parked_case():
+    # Kerbside vehicles come from the road graph: walk up to one in a residential street, take it with E and drive off.
+    parked=lambda:v.call('city_parked')
+    reset();moved=v.call('city_teleport','--x',651.7,'--z',1687.2);assert moved['success'],moved
+    street=wait(parked,lambda p:p['ready'] and p['standing']>=10,20)
+    beside=wait(lambda:v.call('city_parked','--near',1),lambda p:p['within']!='',10)
+    time.sleep(.6);prompt=v.capture('world/parked-native.png')
+    v.press('E');driving=until(lambda s:s['mode']=='drive')
+    after=parked();assert after['taken']==1 and after['vehicle']==beside['within'] and after['cars']==beside['cars']+1,after
+    v.down('UpArrow')
+    try:until(lambda s:s['carSpeed']>3,8)
+    finally:v.up('UpArrow')
+    return {'standing':street['standing'],'blockedBays':street['blocked'],'took':after['vehicle'],'screenshot':prompt}
 
 def night_case():
     # The clock, the lights and the sound: T skips ahead, headlights follow the dark, the engine works through its gears, Q is the horn.
@@ -341,7 +356,7 @@ def activity_case(name):
 
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,night,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,night,parked,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True
