@@ -1,0 +1,11 @@
+{
+  "note": "Authored typology zones (longitude, latitude). They only choose among façade/roof vocabularies; they never move or resize surveyed geometry.",
+  "historicCentre": {
+    "source": "Approximate trace of the sixteenth-century Venetian walls, drawn by hand from the bastion and gate positions.",
+    "ring": [
+      [11.8605, 45.4120], [11.8660, 45.4165], [11.8770, 45.4180], [11.8850, 45.4160], [11.8930, 45.4125],
+      [11.8915, 45.4050], [11.8875, 45.3990], [11.8840, 45.3925], [11.8770, 45.3905], [11.8690, 45.3940],
+      [11.8620, 45.4020]
+    ]
+  }
+}
