@@ -19,6 +19,11 @@ namespace Padova.World
         public Material MinimapMaterial;public bool ShowHelp=true;bool helpSeen;public string Location="";
         InputAction mapAction,interactAction,flightAction,resetAction,escapeAction,clickAction,helpAction;
         bool mapRequested,interactRequested,flightRequested,resetRequested,escapeRequested,clickDown,clickUp;
+        /// <summary>Crash feedback: number of hard knocks answered with a camera jolt and a beat of slow motion.</summary>
+        public int CrashJolts{get;private set;}
+        int impactSeen;CityCar impactCar;float slowUntil;
+        /// <summary>True while the map (or anything else modal) has stopped the simulation.</summary>
+        public bool Halted=>MapOpen;
         public Vector3 Position=>Mode=="drive"&&Driving?Driving.transform.position:Mode=="fly"?Plane.transform.position:Player.transform.position;
         public Rect MapRect=>new Rect(240,140,1120,680);
         void Awake()
@@ -43,6 +48,8 @@ namespace Padova.World
             interactRequested=flightRequested=resetRequested=escapeRequested=clickDown=clickUp=false;
             if(ShowHelp && !helpSeen && Time.time>15){ShowHelp=false;helpSeen=true;}
             if(mapRequested){mapRequested=false;SetMap(!MapOpen);}
+            // One place owns the clock: stopped while a modal screen is up, a beat of slow motion after a hard crash.
+            Time.timeScale=Halted?0:Time.unscaledTime<slowUntil?.4f:1;
             if(MapOpen)
             {
                 if(escape)SetMap(false);
@@ -65,7 +72,8 @@ namespace Padova.World
             NearbyTraffic=Mode=="walk" && !Nearby && Traffic?Traffic.NearestTo(Player.transform.position,5.5f):null;
             if(interact){if(Mode=="drive")ExitCar();else if(Mode=="walk" && Nearby)EnterCar(Nearby);else if(NearbyTraffic!=null)TakeTrafficCar(NearbyTraffic);}
             if(flight){if(Mode=="fly")EndFlight();else LaunchFlight();}
-            if(reset){if(Mode=="drive")Driving.ResetCar();else if(Mode=="fly")EndFlight();}
+            if(reset){if(Mode=="drive")RecoverCar();else if(Mode=="fly")EndFlight();}
+            if(Mode=="drive")CrashFeedback();
             if(HasWaypoint && Vector2.Distance(new Vector2(Position.x,Position.z),new Vector2(Waypoint.x,Waypoint.z))<8 && Mode!="fly")
             {HasWaypoint=false;Notify("Arrived · "+DestinationName);}
             if(Mode!="fly")for(int i=0;i<Visited.Length;i++)
@@ -75,6 +83,37 @@ namespace Padova.World
             }
         }
         public void Notify(string message){Notice=message;noticeUntil=Time.unscaledTime+7;}
+        /// <summary>A hard knock jolts the camera and, when it is a real crash, slows time for an instant.</summary>
+        void CrashFeedback()
+        {
+            if(impactCar!=Driving){impactCar=Driving;impactSeen=Driving.ImpactSerial;return;}
+            if(Driving.ImpactSerial==impactSeen)return;impactSeen=Driving.ImpactSerial;
+            float strength=Mathf.InverseLerp(4,26,Driving.LastImpact);Player.FollowCamera.AddShake(.25f+strength*.75f);CrashJolts++;
+            if(Driving.LastImpact>11)slowUntil=Time.unscaledTime+.16f;
+        }
+        /// <summary>Height of the drivable surface at a point: the ground collider when one is loaded, the terrain model otherwise.</summary>
+        public float SurfaceAt(Vector3 p)
+        {
+            float guess=City.Data.GroundAt(p.x,p.z);
+            return Physics.Raycast(new Vector3(p.x,guess+30,p.z),Vector3.down,out var hit,60,1<<8)?hit.point.y:guess;
+        }
+        /// <summary>R while driving: the car is set upright on the nearest lane, facing along it. Works when flipped, wedged or lost.</summary>
+        public void RecoverCar()
+        {
+            if(!Driving)return;var car=Driving;var p=car.transform.position;var rotation=Quaternion.Euler(0,car.transform.eulerAngles.y,0);
+            var net=Traffic?Traffic.Network:null;
+            if(net!=null)
+            {
+                var (lane,s,_)=net.Nearest(p,true);
+                if(lane>=0)
+                {
+                    p=net.Sample(lane,s,out var tangent);var flat=tangent.WithY(0);
+                    // Keep facing roughly the way the driver was heading: the opposite lane is a metre or two away anyway.
+                    if(flat.sqrMagnitude>.001f)rotation=Quaternion.LookRotation(Vector3.Dot(flat,car.transform.forward)<0?-flat:flat);
+                }
+            }
+            p.y=SurfaceAt(p)+.3f;car.Place(p,rotation);Player.FollowCamera.ResetCamera();Notify("Back on the road");
+        }
         public void SetMap(bool open)
         {
             MapOpen=open;Player.ControlsPaused=open;Time.timeScale=open?0:1;
@@ -89,7 +128,8 @@ namespace Padova.World
         {
             if(MapOpen || Mode!="walk" || !car || Vector3.Distance(car.transform.position,Player.transform.position)>6)return;
             returnPoint=Player.transform.position;returnYaw=Player.FollowCamera.Yaw;PlayerActive(false,true);Driving=car;car.Driven=true;Mode="drive";
-            Player.FollowCamera.Vehicle=car.transform;Player.FollowCamera.ResetCamera();Notify("Shift turbo  ·  Space handbrake  ·  E get out");
+            Player.FollowCamera.Vehicle=car.transform;Player.FollowCamera.VehicleSize=Mathf.Clamp(car.Spec.Length/4.1f,.62f,2.2f);Player.FollowCamera.ResetCamera();
+            Notify("Shift turbo  ·  Space handbrake  ·  R reset  ·  E get out");
         }
         void TakeTrafficCar(CityTraffic.Vehicle vehicle)
         {
@@ -137,8 +177,8 @@ namespace Padova.World
             if(Mode=="drive")
             {
                 // The shared chase camera follows the car; feed it the car's motion.
-                var follow=Player.FollowCamera;follow.VehicleSpeed=Driving.Speed;follow.VehicleBoosting=Driving.Boosting;
-                follow.VehicleReversing=Vector3.Dot(Driving.Body.linearVelocity,Driving.transform.forward)<-3;return;
+                var follow=Player.FollowCamera;follow.VehicleSpeed=Driving.Speed;follow.VehicleBoosting=Driving.Boosting;follow.VehicleVelocity=Driving.Body.linearVelocity;
+                follow.VehicleReversing=Driving.ForwardSpeed<-3;return;
             }
             else
             {
@@ -233,6 +273,7 @@ namespace Padova.World
                     Hud.Text(new Rect(v.x-80,v.y+14,160,24),Mathf.RoundToInt(distance)+" m",18,Color.white,TextAnchor.UpperCenter,true);
                 }
             }
+            if(Mode=="drive" && Driving.Stuck)Hud.Prompt(new Vector2(800,790),"R",Driving.transform.up.y<.35f?"Flip the car back onto its wheels":"Stuck? Put the car back on the road");
             if(Nearby && Mode=="walk")Hud.Prompt(new Vector2(800,790),"E","Drive the "+Nearby.name);
             else if(NearbyTraffic!=null)Hud.Prompt(new Vector2(800,790),"E","Steal the "+NearbyTraffic.Colour+" car");
             if(ShowHelp)Help();

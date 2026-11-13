@@ -27,13 +27,19 @@ namespace Padova.World
                 wanted=g.Police.Wanted,police=g.Police.Units.Count,policeNearest=g.Police.Nearest<9999?g.Police.Nearest:-1,evade=g.Police.Evade,bustTimer=g.Police.BustTimer,busts=g.Police.Busts,escapes=g.Police.Escapes,
                 policeMoving=g.Police.Units.Count(u=>u.Car.Speed>2),boost=g.Driving?g.Driving.Boost:1,boosting=g.Driving&&g.Driving.Boosting,trafficHits=g.Driving?g.Driving.TrafficHits:0,
                 cars=g.Cars.Length,nearby=g.Nearby?g.Nearby.name:"",carPosition=XYZ(g.Cars[0].transform.position),carSpeed=g.Driving?g.Driving.Speed:0,
+                vehicle=g.Driving?g.Driving.Spec.Name:"",drivenPosition=g.Driving?XYZ(g.Driving.transform.position):XYZ(Vector3.zero),drivenHeading=g.Driving?g.Driving.transform.eulerAngles.y:0,
+                carForward=g.Driving?g.Driving.ForwardSpeed:0,carYawRate=g.Driving?Vector3.Dot(g.Driving.Body.angularVelocity,g.Driving.transform.up):0,carGrounded=g.Driving&&g.Driving.Grounded,
+                carSlip=g.Driving?g.Driving.Slip:0,carUp=g.Driving?g.Driving.transform.up.y:1,carStuck=g.Driving&&g.Driving.Stuck,carStuckFor=g.Driving?g.Driving.StuckFor:0,
+                zeroToHundred=g.Driving?g.Driving.ZeroToHundred:-1,peakSpeed=g.Driving?g.Driving.PeakSpeed:0,lastImpact=g.Driving?g.Driving.LastImpact:0,
+                carAir=g.Driving?g.Driving.AirTime:0,carLongestAir=g.Driving?g.Driving.LongestAir:0,carImpacts=g.Driving?g.Driving.Impacts:0,crashJolts=g.CrashJolts,
+                cameraShake=g.Player.FollowCamera.Shake,cameraFov=Camera.main?Camera.main.fieldOfView:0,cameraDistance=g.Player.FollowCamera.ActualDistance,timeScale=Time.timeScale,time=Time.time,
                 carTravel=g.Cars[0].DistanceTravelled,carHeading=g.Cars[0].transform.eulerAngles.y,planeSpeed=g.Plane.Speed,altitude=g.Plane.Altitude,planeHeading=g.Plane.transform.eulerAngles.y,
                 planeTravel=g.Plane.DistanceTravelled,npcs=g.Crowd.ActiveCount,npcsMoved=g.Crowd.MovedCount,npcTravel=g.Crowd.TotalTravel,invalidNav=invalid,
                 worldBuildings=g.City.Buildings,g.Discoveries,playerEnabled=g.Player.enabled,colliderEnabled=g.Player.GetComponent<CharacterController>().enabled};
         }
-        static int savedMoney;static float savedBest;static bool hadMoney,hadBest,prefsSaved;
+        static int savedMoney;static float savedBest;static bool hadMoney,hadBest,prefsSaved;static GameObject pad,padWall;static float farClip;static Vector3 padOrigin;
         [CliCommand("activity_fixture","Development-only setup for traffic and activity state-transition scenarios; does not complete objectives.")]
-        public static object ActivityFixture([CliArg("name","save | restore | target | checkpoint | traffic | flee | clear_police",Required=true)]string name,
+        public static object ActivityFixture([CliArg("name","save | restore | target | checkpoint | traffic | flee | clear_police | pad | wall | flip | calm | busy",Required=true)]string name,
             [CliArg("distance","Metres before activity target")]float distance=0)
         {
             var g=Game;var a=g.Activities;
@@ -55,14 +61,39 @@ namespace Padova.World
                 if(!g.Driving)throw new InvalidOperationException("Enter a car first");var net=g.Traffic.Network;Vector3 best=g.Position;float bestScore=-1;Vector3 bestTangent=Vector3.forward;
                 for(int i=0;i<net.Lanes.Count;i+=7)
                 {
-                    var p=net.Sample(i,net.Lanes[i].Length*.5f,out var tangent);if(Mathf.Abs(p.x)>1100||Mathf.Abs(p.z)>950)continue;
+                    var p=net.Sample(i,net.Lanes[i].Length*.5f,out var tangent);if(Vector3.Distance(p,g.Position)>1400)continue;
                     float score=float.MaxValue;foreach(var q in g.Police.Positions)score=Mathf.Min(score,Vector3.Distance(p,q));
                     if(score>bestScore&&score<700){bestScore=score;best=p;bestTangent=tangent;}
                 }
-                var car=g.Driving;var pos=best+Vector3.up*.3f;car.Body.linearVelocity=Vector3.zero;car.Body.angularVelocity=Vector3.zero;
-                car.Body.position=pos;car.Body.rotation=Quaternion.LookRotation(bestTangent.WithY(0));car.transform.SetPositionAndRotation(pos,car.Body.rotation);Physics.SyncTransforms();
+                g.Driving.Place(best+Vector3.up*.3f,Quaternion.LookRotation(bestTangent.WithY(0)));
             }
             else if(name=="clear_police"){g.Police.Clear();}
+            else if(name=="calm" || name=="busy")
+            {
+                // Handling measurements need an empty road; traffic resumes where it stopped.
+                bool on=name=="busy";g.Traffic.enabled=on;foreach(var t in g.Traffic.Vehicles)t.Go.SetActive(on);
+                if(on && farClip>0 && Camera.main){Camera.main.farClipPlane=farClip;farClip=0;}
+            }
+            else if(name=="pad" || name=="flip" || name=="wall")
+            {
+                if(!g.Driving)throw new InvalidOperationException("Enter a car first");var car=g.Driving;
+                if(name=="flip"){car.Place(car.transform.position+Vector3.up*1.2f,car.transform.rotation*Quaternion.Euler(0,0,180));return Read();}
+                // A flat strip high above the city with a wall at the far end: handling is measured on it without traffic, kerbs or bends.
+                const float length=900,height=400;
+                if(!pad)
+                {
+                    padOrigin=new Vector3(g.Position.x,height,g.Position.z-length*.5f);
+                    pad=GameObject.CreatePrimitive(PrimitiveType.Cube);pad.name="Handling test pad";pad.layer=8;pad.transform.localScale=new Vector3(500,1,length);
+                    padWall=GameObject.CreatePrimitive(PrimitiveType.Cube);padWall.name="Handling test wall";padWall.layer=9;padWall.transform.localScale=new Vector3(500,8,2);
+                }
+                // The pad's top face is at `height`; the car starts 20 m in from its near end.
+                var origin=padOrigin;pad.transform.position=origin+new Vector3(0,-.5f,length*.5f-20);
+                padWall.transform.position=origin+new Vector3(0,4,length-21);Physics.SyncTransforms();
+                // From up here the camera would draw the whole city and the frame rate would distort the measurements; "busy" restores the view.
+                if(Camera.main && farClip<=0){farClip=Camera.main.farClipPlane;Camera.main.farClipPlane=160;}
+                car.Place(origin+new Vector3(0,.3f,name=="wall"?length-22-distance:0),Quaternion.identity);g.Player.FollowCamera.ResetCamera();
+                return new{length=length-60,state=Read()};
+            }
             else if(name=="traffic")
             {
                 Fixture("reset");var v=g.Traffic.Vehicles.First(v=>v.Go.activeSelf);var p=v.Go.transform.position+v.Go.transform.forward*5;
@@ -76,8 +107,7 @@ namespace Padova.World
                 var p=target-tangent.WithY(0).normalized*distance;
                 p.y=g.City.Data.GroundAt(p.x,p.z)+.25f;
                 if(Physics.Raycast(p+Vector3.up*30,Vector3.down,out var hit,60,1<<8))p.y=hit.point.y+.25f;
-                var car=g.Driving;car.Body.linearVelocity=Vector3.zero;car.Body.angularVelocity=Vector3.zero;
-                car.Body.position=p;car.Body.rotation=Quaternion.LookRotation(tangent.WithY(0));car.transform.SetPositionAndRotation(p,car.Body.rotation);Physics.SyncTransforms();
+                g.Driving.Place(p,Quaternion.LookRotation(tangent.WithY(0)));
             }
             else throw new ArgumentException(name);
             return Read();

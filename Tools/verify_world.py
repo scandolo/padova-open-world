@@ -22,8 +22,97 @@ def until(predicate,timeout=15):
 def delta(a,b):return math.dist(a['position'],b['position'])
 def reset():
     v.call('world_fixture','--name','reset');return until(lambda s:s['mode']=='walk' and s['playerEnabled'])
+class hold:
+    """Keys held for the duration of a with-block and always released."""
+    def __init__(self,*keys):self.keys=keys
+    def __enter__(self):
+        for k in self.keys:v.down(k)
+    def __exit__(self,*_):
+        for k in reversed(self.keys):v.up(k)
+
+def straight(settle=.9):
+    """Driven car at rest at the start of the handling test pad (a flat strip above the city)."""
+    info=v.call('activity_fixture','--name','pad');time.sleep(settle)
+    s=state();assert s['carGrounded'] and s['carSpeed']<.6 and s['carUp']>.97,('Car did not settle on its wheels',s)
+    return info,s
+
+def drive_case():
+    """Driving feel by measurement: launch, top speed, braking, turning circle, handbrake slide and recovery, flip reset, crash feedback."""
+    reset();v.call('activity_fixture','--name','calm')
+    try:return drive_measurements()
+    finally:v.call('activity_fixture','--name','busy')
+
+def drive_measurements():
+    enter_car();out={}
+    info,start=straight();length=info['length'];out.update(vehicle=start['vehicle'])
+    trace=[]
+    with hold('UpArrow'):
+        end=time.monotonic()+30
+        while time.monotonic()<end:
+            s=state();trace.append([round(s['time']-start['time'],2),round(s['carForward']*3.6,1)])
+            if math.dist(s['drivenPosition'],start['drivenPosition'])>length-75:break
+            if s['time']-start['time']>6 and s['peakSpeed']-s['carForward']<.02 and len(trace)>20 and trace[-1][1]-trace[-12][1]<.25:break # plateau: top speed reached
+    fast=state();out.update(zeroToHundredSeconds=round(fast['zeroToHundred'],2),topKmh=round(fast['peakSpeed']*3.6,1),speedTrace=trace[::3])
+    assert fast['peakSpeed']>20,fast
+    # Brakes: deceleration between two samples in the middle of a full stop.
+    with hold('DownArrow'):
+        a=until(lambda s:s['carForward']<fast['carForward']*.85,6);b=until(lambda s:s['carForward']<max(3,a['carForward']*.35),6)
+    out['brakeMps2']=round((a['carForward']-b['carForward'])/max(1e-3,b['time']-a['time']),1)
+    assert out['brakeMps2']>12,out
+    with hold('Space'):stopped=until(lambda s:s['carSpeed']<.3,6)
+    out['runMetres']=round(math.dist(stopped['drivenPosition'],start['drivenPosition']),1)
+    # Turbo top speed on the same straight.
+    info,start=straight()
+    with hold('LeftShift','UpArrow'):
+        boosted=until(lambda s:s['boosting'],3);time.sleep(2.6)
+    out['turboKmhAfter2_6s']=round(state()['peakSpeed']*3.6,1)
+    with hold('Space'):until(lambda s:s['carSpeed']<.3,8)
+    # Turning circle at parking speed: radius = speed / yaw rate while holding full lock from rest.
+    info,start=straight();radii=[]
+    with hold('UpArrow','RightArrow'):
+        end=time.monotonic()+2.2
+        while time.monotonic()<end:
+            s=state()
+            if 1.5<s['carForward']<5 and s['carYawRate']>.4:radii.append(s['carForward']/s['carYawRate'])
+    assert radii,'No steering response at low speed'
+    out['turningCircleMetres']=round(2*min(radii),1);assert 4<out['turningCircleMetres']<11,out
+    with hold('Space'):until(lambda s:s['carSpeed']<.3,6)
+    # Handbrake: the tail comes round, then the car grips again by itself.
+    info,start=straight()
+    with hold('UpArrow'):until(lambda s:s['carForward']>15,10)
+    slip=0;yaw=0
+    with hold('RightArrow','Space'):
+        end=time.monotonic()+.9
+        while time.monotonic()<end:
+            s=state();slip=max(slip,s['carSlip']);yaw=max(yaw,abs(s['carYawRate']))
+    out.update(handbrakeSlip=round(slip,2),handbrakeYawRate=round(yaw,2));assert slip>.3 and yaw>1,out
+    recovered=until(lambda s:s['carSlip']<.05 and abs(s['carYawRate'])<.25,5)
+    turned=(recovered['drivenHeading']+180)%360-180
+    out['handbrakeTurnDegrees']=round(turned,1);assert recovered['carUp']>.9 and 25<turned<160 and recovered['carGrounded'],recovered
+    with hold('Space'):until(lambda s:s['carSpeed']<.3,6)
+    # Crash: a wall at speed jolts the camera once and counts one impact.
+    v.call('activity_fixture','--name','wall','--distance',60);time.sleep(.9);before=state()
+    with hold('UpArrow'):hit=until(lambda s:s['carImpacts']>before['carImpacts'],12)
+    time.sleep(.4);after=state()
+    out.update(crashClosingKmh=round(hit['lastImpact']*3.6,1),cameraShakeAtImpact=round(hit['cameraShake'],2))
+    assert after['crashJolts']>before['crashJolts'] and after['timeScale']==1 and hit['lastImpact']>8,after
+    # R from anywhere (here: 400 m up on the pad) puts the car back on the nearest lane in the street.
+    v.press('R');street=until(lambda s:s['carGrounded'] and s['drivenPosition'][1]<100 and 'Back on the road' in s['notice'],6)
+    # Upside down: the game notices after three seconds, offers R, and R sets the car on its wheels again.
+    time.sleep(.5);v.call('activity_fixture','--name','flip')
+    stuck=until(lambda s:s['carStuck'],9);assert stuck['carUp']<.3,stuck
+    out['stuckPromptScreenshot']=v.capture('world/drive-stuck-native.png')
+    v.press('R');upright=until(lambda s:s['carUp']>.97 and s['carGrounded'] and not s['carStuck'],5)
+    assert math.dist(upright['drivenPosition'],stuck['drivenPosition'])<40,(stuck,upright)
+    with hold('UpArrow'):until(lambda s:s['carForward']>6,6)
+    time.sleep(.4);out['screenshot']=v.capture('world/drive-native.png')
+    with hold('Space'):until(lambda s:s['carSpeed']<.3,6)
+    v.press('E');until(lambda s:s['mode']=='walk',6)
+    return out
+
 def run_case(name):
     if name in ['traffic','taxi','race','police']:return activity_case(name)
+    if name=='drive':return drive_case()
     if name not in ['map','car','flight','crowd','quiet_flight','santo','prato','landmarks']:
         reset();return original(name) # Leave any car or plane first: the walking cases need the character.
     reset()
@@ -197,8 +286,9 @@ def activity_case(name):
             screenshot=v.capture('world/taxi-native.png')
             choose('Digit0');ended=until(lambda s:s['activity']=='')
             time.sleep(.3);assert state()['money']==paid['money'],'Duplicate payout after cancelling'
-            v.press('R');until(lambda s:math.dist(s['position'],start['position'])<1)
-            time.sleep(.3);assert math.dist(state()['position'],start['position'])<1,'Physics undid the car reset'
+            # R puts the car back on the nearest lane, upright and at rest, wherever it is.
+            v.press('R');back=until(lambda s:s['carSpeed']<.5 and s['carGrounded'] and 'Back on the road' in s['notice'],6)
+            time.sleep(.3);assert math.dist(state()['position'],back['position'])<1,'Physics undid the car reset'
             return {'paidEuros':paid['money']-start['money'],'fareMetres':onboard['routeLength'],'savedWallet':True,'onFootRejected':True,'mapPausesTimer':True,'cancelled':True,'screenshot':screenshot,'mapScreenshot':route_screen,'fixture':'Position setup for pickup approach and drop-off; actual input drives pickup approach.'}
         start=enter_car();choose('Digit2');until(lambda s:s['phase']=='start')
         v.call('activity_fixture','--name','target');countdown=until(lambda s:s['phase']=='countdown')
@@ -217,7 +307,7 @@ def activity_case(name):
 
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,flight,crowd,traffic,taxi,race,police,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True
