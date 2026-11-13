@@ -11,24 +11,16 @@ namespace Padova.World
         public OpenWorld Game;public CityTraffic Traffic;public Activities Activities;public Material LightMaterial;
         public int Wanted,Busts,Escapes,Spawned;public float Evade,BustTimer;
         public const int MaxWanted=3;public const float EvadeSeconds=15,LoseDistance=110,BustDistance=9,BustSeconds=2.5f,PhaseDistance=60;
-        public sealed class Unit{public CityCar Car;public readonly List<Vector3> Path=new();public int Next;public float Replan,Stuck,ReverseUntil,Lost,Closest=float.MaxValue,Stalled,GhostUntil;public Renderer[] Lights;public readonly HashSet<Collider> Ghosted=new();}
+        public sealed class Unit{public CityCar Car;public readonly List<Vector3> Path=new();public int Next;public float Replan,Stuck,ReverseUntil,Lost,Closest=float.MaxValue,Stalled,GhostUntil;public List<(Renderer renderer,int index)> Lights;public readonly HashSet<Collider> Ghosted=new();}
         public readonly List<Unit> Units=new();
         public float Nearest{get;private set;}=float.MaxValue;
         bool responding;float respondUntil;
-        readonly System.Random random=new(113);Mesh body;Material[] bodyMaterials;Mesh lightMesh;Material[] lightMaterials;MaterialPropertyBlock block;
+        readonly System.Random random=new(113);MaterialPropertyBlock block;
         int lastHits;CityCar watched;float heatCooldown,nextSpawn,clearedAt=-1,bannerAt=-10;string bannerTitle="",bannerSubtitle="";Color bannerColor;
         RoadNetwork Net=>Traffic?Traffic.Network:null;
         void Start()
         {
-            block=new MaterialPropertyBlock();var palette=Game.City.City.Materials;
-            var paint=new Material(palette[(int)Slot.VehicleBlue]){name="Police blue"};var blue=new Color(.05f,.13f,.38f);paint.SetColor("_BaseColor",blue);paint.color=blue;
-            var custom=(Material[])palette.Clone();custom[(int)Slot.VehicleBlue]=paint;
-            var sink=new MeshSink();WorldShapes.CarBody(sink,Slot.VehicleBlue);
-            // White side band and roof sign, the Polizia di Stato livery pattern on a generic body.
-            foreach(float side in new[]{-1f,1f})sink.Box(Slot.White,new Vector3(side*.865f,.66f,0),Vector3.right*.012f,Vector3.up*.07f,Vector3.forward*1.9f);
-            body=sink.ToMesh("Police car",custom,out bodyMaterials);
-            var lights=(Material[])palette.Clone();if(LightMaterial)lights[(int)Slot.LampGlow]=LightMaterial;
-            var bar=new MeshSink();bar.Box(Slot.LampGlow,Vector3.zero,Vector3.right*.28f,Vector3.up*.07f,Vector3.forward*.12f);lightMesh=bar.ToMesh("Police light",lights,out lightMaterials,false);
+            block=new MaterialPropertyBlock();
         }
         public void Raise(int amount,string reason)
         {
@@ -59,9 +51,11 @@ namespace Padova.World
                 foreach(var u in Units)Destroy(u.Car.gameObject);Units.Clear();
             }
             bool phase=Mathf.Repeat(Time.time,.5f)<.25f;
-            foreach(var u in Units)for(int i=0;i<u.Lights.Length;i++)
+            foreach(var u in Units)for(int i=0;i<u.Lights.Count;i++)
             {
-                bool on=Wanted>0 && (i==0)==phase;block.SetColor("_BaseColor",i==0?new Color(1,.1f,.08f,on?1:.25f):new Color(.15f,.35f,1,on?1:.25f));u.Lights[i].SetPropertyBlock(block);
+                // Italian patrol cars flash blue only; the two halves of the bar take turns.
+                bool on=Wanted>0 && (i%2==0)==phase;var c=new Color(.12f,.38f,1)*(on?1:.18f);var (r,slot)=u.Lights[i];
+                r.GetPropertyBlock(block,slot);block.SetColor("_BaseColor",c);block.SetColor("_EmissionColor",c*(on?3f:.1f));r.SetPropertyBlock(block,slot);
             }
         }
         void Bust()
@@ -91,17 +85,9 @@ namespace Padova.World
         }
         void Create(Vector3 p,Quaternion rotation)
         {
-            Spawned++;var go=new GameObject("Police car "+Spawned);go.transform.SetParent(transform,false);go.transform.SetPositionAndRotation(p,rotation);
-            var shell=new GameObject("Body");shell.transform.SetParent(go.transform,false);shell.AddComponent<MeshFilter>().sharedMesh=body;shell.AddComponent<MeshRenderer>().sharedMaterials=bodyMaterials;
-            var lights=new Renderer[2];
-            for(int i=0;i<2;i++)
-            {
-                var light=new GameObject(i==0?"Red light":"Blue light");light.transform.SetParent(go.transform,false);light.transform.localPosition=new Vector3(i==0?-.3f:.3f,1.68f,-.05f);
-                light.AddComponent<MeshFilter>().sharedMesh=lightMesh;var r=light.AddComponent<MeshRenderer>();r.sharedMaterials=lightMaterials;r.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;lights[i]=r;
-            }
-            var (wheelMesh,wheelMaterials)=Traffic.WheelMesh;
-            var car=CityCar.Equip(go,()=>{var w=new GameObject("Wheel");w.AddComponent<MeshFilter>().sharedMesh=wheelMesh;w.AddComponent<MeshRenderer>().sharedMaterials=wheelMaterials;return w.transform;});
-            car.Autopilot=true;car.TopSpeed=24;Units.Add(new Unit{Car=car,Lights=lights});
+            Spawned++;
+            var car=VehicleFactory.Drivable(VehicleCatalog.Pantera,VehicleCatalog.Pantera.Livery,p,rotation,transform);car.name="Police car "+Spawned;
+            car.Autopilot=true;car.TopSpeed=24;Units.Add(new Unit{Car=car,Lights=VehicleFactory.Slots(car.gameObject,"LightBlue")});
         }
         void FixedUpdate()
         {

@@ -23,6 +23,8 @@ namespace Padova.City
         [Header("State")]
         public int Tiles;
         public int DetailTiles, ColliderTiles, Pending;
+        /// <summary>Tiles inside the collider radius whose ground and walls are not solid yet.</summary>
+        public int MissingColliders;
         public long Vertices;
         public float LastApplyMilliseconds, SlowestApplyMilliseconds;
         /// <summary>Accumulated cost by stage (ms): worker meshing, worker facades, collider cooking, main-thread uploads.</summary>
@@ -165,8 +167,10 @@ namespace Padova.City
             foreach (var tile in tiles.Values) scratch.Add(tile);
             scratch.Sort((a, b) => a.Distance.CompareTo(b.Distance));
             Tiles = DetailTiles = ColliderTiles = Pending = 0;
+            int missing = 0;
             foreach (var tile in scratch)
             {
+                if (tile.Distance <= collide && !tile.Empty && !tile.Baked) missing++;
                 if (tile.ShellJob != null && !tile.ShellJob.IsCompleted) running++;
                 if (tile.DetailJob != null && !tile.DetailJob.IsCompleted) running++;
                 if (tile.BakeJob != null && !tile.BakeJob.IsCompleted) baking++;
@@ -274,6 +278,7 @@ namespace Padova.City
                 }
                 if (tile.Detail) DetailTiles++;
             }
+            MissingColliders = missing;
             double scale = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             ShellMs = shellTicks * scale; DetailMs = detailTicks * scale; BakeMs = bakeTicks * scale;
             LastApplyMilliseconds = (float)watch.Elapsed.TotalMilliseconds;

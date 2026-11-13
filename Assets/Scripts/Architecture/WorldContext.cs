@@ -22,7 +22,7 @@ namespace Padova.Architecture
         }
     }
     [Serializable] public sealed class WorldRoad {public string id,name;public float[] points;}
-    [Serializable] public sealed class WorldPlace {public string name,source;public float x,z;}
+    [Serializable] public sealed class WorldPlace {public string name,source,kind;public float x,z;public int rank;}
     /// <summary>Survey records superseded by Blender landmark models (Assets/Art/Landmarks/Landmarks.json).
     /// The city compiler reads the same manifest, so those units and that ground are left out of the packs.</summary>
     [Serializable] public sealed class LandmarkManifest
@@ -46,6 +46,10 @@ namespace Padova.Architecture
         public int Buildings;public int Chunks;public float BuildMilliseconds;
         public WorldPlan Data{get;private set;}
         public CityStreamer Streamer{get;private set;}
+        /// <summary>Drivable road graph of the whole comune (null until the city data is compiled).</summary>
+        public CityRoads Roads{get;private set;}
+        /// <summary>Named places, points of interest and districts from the city data.</summary>
+        public CityPlaces Places{get;private set;}
         void OnEnable(){if(Plan)Build();}
         void OnDisable(){if(Streamer)Streamer.Close();}
         public void Build()
@@ -65,7 +69,35 @@ namespace Padova.Architecture
                 Data.extent=new[]{t.X0,t.Z0,t.X0+(t.Nx-1)*t.Step,t.Z0+(t.Nz-1)*t.Step};Data.plane=t.Plane;Data.coreExtent=t.Core;
                 Buildings=Streamer.Pack.Index.totals!=null?Streamer.Pack.Index.totals.units:0;
             }
+            LoadGameplayData();
             BuildMilliseconds=(float)watch.Elapsed.TotalMilliseconds;
+        }
+        void LoadGameplayData()
+        {
+            string folder=CityPack.DefaultFolder;
+            Roads=CityRoads.Load(System.IO.Path.Combine(folder,"roads.bin"));
+            if(Roads!=null)
+            {
+                // Plain centrelines for code and tests that only need geometry and names.
+                var roads=new WorldRoad[Roads.Edges.Length];
+                for(int i=0;i<roads.Length;i++){var e=Roads.Edges[i];roads[i]=new WorldRoad{id="EL_STR:"+i,name=e.Name<Roads.Names.Length?Roads.Names[e.Name]:"",points=e.Points};}
+                Data.roads=roads;
+            }
+            Places=CityPlaces.Load(System.IO.Path.Combine(folder,"places.json"));
+            foreach(var p in Data.landmarks)if(p.rank==0){p.rank=1;if(string.IsNullOrEmpty(p.kind))p.kind="landmark";}
+            if(Places==null)return;
+            // OpenStreetMap names the outer neighbourhoods; the walled city is the one district it leaves implicit.
+            if(!System.Array.Exists(Places.districts,d=>d.name.StartsWith("Centro")))
+            {var list=new List<CityDistrict>(Places.districts){new CityDistrict{name="Centro Storico",x=20,z=-150}};Places.districts=list.ToArray();}
+            // The hand-placed discovery points keep priority; the city data adds every other notable place.
+            var all=new List<WorldPlace>(Data.landmarks);
+            foreach(var place in Places.places)
+            {
+                if(place.rank>2)continue;bool taken=false;
+                foreach(var known in all){float dx=known.x-place.x,dz=known.z-place.z;if(dx*dx+dz*dz<90*90&&(known.rank==1||known.name==place.name)){taken=true;break;}}
+                if(!taken)all.Add(new WorldPlace{name=place.name,source=place.source,kind=place.kind,x=place.x,z=place.z,rank=place.rank});
+            }
+            Data.landmarks=all.ToArray();
         }
         public void RefreshVisibility(Vector3 eye){if(Streamer)Streamer.RefreshVisibility(eye);}
     }

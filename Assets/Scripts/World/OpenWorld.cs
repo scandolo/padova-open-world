@@ -11,6 +11,10 @@ namespace Padova.World
         public ThirdPersonMotor Player;public WorldContext City;public CityCar[] Cars;public TourPlane Plane;public CityCrowd Crowd;
         public CityTraffic Traffic;public Activities Activities;public Police Police;public CityTraffic.Vehicle NearbyTraffic{get;private set;}
         public Texture2D MapTexture;public bool MapOpen;public string Mode="walk";
+        /// <summary>Second map sheet at 1 m per pixel around the centre, and the world rectangles (x0, z0, x1, z1) both sheets cover.</summary>
+        public Texture2D MapDetail;public Vector4 MapExtent=new Vector4(-1500,-1300,1500,1300),DetailExtent;
+        /// <summary>Neighbourhood the player is in, announced when it changes.</summary>
+        public string District="";float districtSince=-10;
         public CityCar Driving{get;private set;}public CityCar Nearby{get;private set;}
         public bool HasWaypoint;public Vector3 Waypoint;public string DestinationName="";
         public float MapSpan=800;public Vector2 MapCentre;public int Discoveries;
@@ -26,6 +30,13 @@ namespace Padova.World
         public bool Halted=>MapOpen;
         public Vector3 Position=>Mode=="drive"&&Driving?Driving.transform.position:Mode=="fly"?Plane.transform.position:Player.transform.position;
         public Rect MapRect=>new Rect(240,140,1120,680);
+        /// <summary>Map sheet for a view: the detailed centre sheet when the view fits inside it, the whole comune otherwise.</summary>
+        (Texture2D sheet,Vector4 extent) Sheet(Vector2 centre,float spanX,float spanZ)
+        {
+            var d=DetailExtent;
+            if(MapDetail && spanX<2600 && centre.x-spanX*.5f>d.x && centre.x+spanX*.5f<d.z && centre.y-spanZ*.5f>d.y && centre.y+spanZ*.5f<d.w)return (MapDetail,d);
+            return (MapTexture,MapExtent);
+        }
         void Awake()
         {
             InputAction Button(string name,string binding,System.Action action){var a=new InputAction(name,InputActionType.Button,binding);a.performed+=_=>action();a.Enable();return a;}
@@ -38,6 +49,10 @@ namespace Padova.World
         }
         void Start()
         {
+            if(Plane)Plane.Half=Player.WorldHalfSize-new Vector2(170,170);
+            // Cars parked in the scene take their catalog models.
+            var specs=new[]{VehicleCatalog.Berlina,VehicleCatalog.Utilitaria,VehicleCatalog.Utilitaria};var paints=new[]{new Color(.1f,.27f,.5f),new Color(.76f,.14f,.1f),new Color(.93f,.9f,.8f)};
+            for(int i=0;i<Cars.Length&&i<specs.Length;i++)if(Cars[i])Cars[i]=VehicleFactory.Replace(Cars[i],specs[i],paints[i]);
             var hud=Player.GetComponent<WalkHud>();if(!hud)hud=FindFirstObjectByType<WalkHud>();if(hud){if(hud.GoalMarker)hud.GoalMarker.gameObject.SetActive(false);hud.enabled=false;}
             Notice="Welcome to Padova  ·  E to take a car  ·  J for activities";            Visited=new bool[City.Data.landmarks.Length];MapCentre=new Vector2(Player.transform.position.x,Player.transform.position.z);
         }
@@ -58,7 +73,7 @@ namespace Padova.World
                     Vector2 point=new Vector2(mouse.position.x.ReadValue()*1600/Screen.width,(Screen.height-mouse.position.y.ReadValue())*1000/Screen.height);
                     if(MapRect.Contains(point))
                     {
-                        float scroll=mouse.scroll.y.ReadValue();if(Mathf.Abs(scroll)>0)MapSpan=Mathf.Clamp(MapSpan*Mathf.Exp(-scroll*.0015f),180,3000);
+                        float scroll=mouse.scroll.y.ReadValue();if(Mathf.Abs(scroll)>0)MapSpan=Mathf.Clamp(MapSpan*Mathf.Exp(-scroll*.0015f),180,Mathf.Max(3000,MapExtent.z-MapExtent.x));
                         if(down){dragStart=point;dragging=false;}
                         if(mouse.leftButton.isPressed && (point-dragStart).magnitude>5)dragging=true;
                         if(mouse.leftButton.isPressed && dragging)
@@ -135,11 +150,7 @@ namespace Padova.World
         {
             Traffic.Release(vehicle,v=>
             {
-                var go=new GameObject(v.Colour+" compact");go.transform.SetParent(transform);go.transform.SetPositionAndRotation(v.Go.transform.position,v.Go.transform.rotation);
-                var (mesh,materials)=Traffic.Body(v);var body=new GameObject("Body");body.transform.SetParent(go.transform,false);
-                body.AddComponent<MeshFilter>().sharedMesh=mesh;body.AddComponent<MeshRenderer>().sharedMaterials=materials;
-                var (wheelMesh,wheelMaterials)=Traffic.WheelMesh;
-                var car=CityCar.Equip(go,()=>{var wheel=new GameObject("Wheel");wheel.AddComponent<MeshFilter>().sharedMesh=wheelMesh;wheel.AddComponent<MeshRenderer>().sharedMaterials=wheelMaterials;return wheel.transform;});
+                var car=VehicleFactory.Drivable(v.Spec,v.Paint,v.Go.transform.position,v.Go.transform.rotation,transform);car.name=v.Spec.Label;
                 var cars=new System.Collections.Generic.List<CityCar>(Cars){car};Cars=cars.ToArray();EnterCar(car);if(Police)Police.Raise(1,"Car theft reported");
             });
             NearbyTraffic=null;
@@ -198,7 +209,9 @@ namespace Padova.World
         void UpdateLocation()
         {
             if(Time.unscaledTime<nextLocation)return;nextLocation=Time.unscaledTime+.8f;string name="";
-            foreach(var p in City.Data.landmarks)if(Vector2.Distance(new Vector2(p.x,p.z),new Vector2(Position.x,Position.z))<70){name=p.name;break;}
+            foreach(var p in City.Data.landmarks)if(Vector2.Distance(new Vector2(p.x,p.z),new Vector2(Position.x,Position.z))<(p.rank<=1?70:38)){name=p.name;break;}
+            string district=City.Places!=null?City.Places.DistrictAt(Position.x,Position.z):"";
+            if(district!=District){District=district;if(district!="")districtSince=Time.unscaledTime;}
             if(name=="" && Traffic && Traffic.Network!=null){var (lane,_,distance)=Traffic.Network.Nearest(Position);if(lane>=0&&distance<30)name=Traffic.Network.Lanes[lane].Name;}
             if(name=="")name=Location==""?"Padova":Location;
             if(name!=Location){Location=name;locationSince=Time.unscaledTime;}
@@ -212,8 +225,9 @@ namespace Padova.World
             var rect=new Rect(centre.x-radius,centre.y-radius,radius*2,radius*2);
             if(MinimapMaterial && Event.current.type==EventType.Repaint)
             {
-                MinimapMaterial.SetVector("_Center",new Vector4((Position.x+1500)/3000,(Position.z+1300)/2600,0,0));MinimapMaterial.SetVector("_Scale",new Vector4(span/3000,span/2600,0,0));
-                MinimapMaterial.SetFloat("_Angle",view*Mathf.Deg2Rad);Graphics.DrawTexture(rect,MapTexture,MinimapMaterial);
+                var (sheet,e)=Sheet(new Vector2(Position.x,Position.z),span*1.5f,span*1.5f);float sw=e.z-e.x,sh=e.w-e.y;
+                MinimapMaterial.SetVector("_Center",new Vector4((Position.x-e.x)/sw,(Position.z-e.y)/sh,0,0));MinimapMaterial.SetVector("_Scale",new Vector4(span/sw,span/sh,0,0));
+                MinimapMaterial.SetFloat("_Angle",view*Mathf.Deg2Rad);Graphics.DrawTexture(rect,sheet,MinimapMaterial);
             }
             else if(!MinimapMaterial)Hud.Disc(centre,radius*2,new Color(.2f,.24f,.25f,.9f));
             // World offset → minimap, rotated so the camera's view points up; off-map markers stick to the rim.
@@ -238,6 +252,13 @@ namespace Padova.World
             if(!Player || City.Data==null)return;var old=GUI.matrix;Hud.Begin();
             if(MapOpen){DrawMap();GUI.matrix=old;return;}
             UpdateLocation();Minimap();
+            float sinceDistrict=Time.unscaledTime-districtSince;
+            if(sinceDistrict<5 && District!="")
+            {
+                float a=Mathf.Clamp01(sinceDistrict*2)*Mathf.Clamp01((5-sinceDistrict)*1.2f);
+                Hud.Text(new Rect(300,96,1000,34),"PADOVA  ·  QUARTIERE",20,new Color(1,1,1,a*.8f),TextAnchor.MiddleCenter,true);
+                Hud.Text(new Rect(200,124,1200,90),District.ToUpperInvariant(),76,new Color(Hud.Cream.r,Hud.Cream.g,Hud.Cream.b,a),TextAnchor.MiddleCenter,false,true);
+            }
             Hud.Text(new Rect(292,868,420,30),Location,24,Color.white,TextAnchor.UpperLeft,true);
             Hud.Text(new Rect(292,898,420,24),Discoveries+" / "+Visited.Length+" places discovered",17,Hud.Muted);
             Hud.Text(new Rect(292,922,420,24),"<b>M</b> map   ·   <b>J</b> activities   ·   <b>H</b> controls",17,Hud.Muted);
@@ -275,7 +296,7 @@ namespace Padova.World
             }
             if(Mode=="drive" && Driving.Stuck)Hud.Prompt(new Vector2(800,790),"R",Driving.transform.up.y<.35f?"Flip the car back onto its wheels":"Stuck? Put the car back on the road");
             if(Nearby && Mode=="walk")Hud.Prompt(new Vector2(800,790),"E","Drive the "+Nearby.name);
-            else if(NearbyTraffic!=null)Hud.Prompt(new Vector2(800,790),"E","Steal the "+NearbyTraffic.Colour+" car");
+            else if(NearbyTraffic!=null)Hud.Prompt(new Vector2(800,790),"E","Steal the "+NearbyTraffic.Colour);
             if(ShowHelp)Help();
             Hud.Text(new Rect(34,978,1300,20),"Comune di Padova / Regione Veneto · IODL 2.0   ·   Names © OpenStreetMap · ODbL   ·   Poly Haven / Kenney · CC0   ·   Façades and street life are authored typology",12,new Color(1,1,1,.5f));
             GUI.matrix=old;
@@ -299,7 +320,8 @@ namespace Padova.World
             Hud.Text(new Rect(214,74,700,60),"PADOVA",52,Hud.Cream,TextAnchor.UpperLeft,false,true);Hud.Text(new Rect(410,92,600,30),"City map",22,Hud.Muted,TextAnchor.UpperLeft,true);
             if(Button(new Rect(1225,84,160,40),"M","Close"))SetMap(false);
             var r=MapRect;float h=MapSpan*r.height/r.width;
-            GUI.DrawTextureWithTexCoords(r,MapTexture,new Rect((MapCentre.x-MapSpan/2+1500)/3000,(MapCentre.y-h/2+1300)/2600,MapSpan/3000,h/2600));
+            var (sheet,e)=Sheet(MapCentre,MapSpan,h);float sw=e.z-e.x,sh=e.w-e.y;
+            GUI.DrawTextureWithTexCoords(r,sheet,new Rect((MapCentre.x-MapSpan/2-e.x)/sw,(MapCentre.y-h/2-e.y)/sh,MapSpan/sw,h/sh));
             var label=Hud.Style(15,true);
             GUI.BeginGroup(r);
             if(Activities && Activities.Active)foreach(var point in Activities.Route)Dot(WorldToMap(point)-r.position,Hud.Cool,6);
@@ -310,7 +332,9 @@ namespace Padova.World
             {
                 var p=WorldToMap(new Vector3(place.x,0,place.z))-r.position;
                 if(p.x<0||p.y<0||p.x>r.width||p.y>r.height)continue;
-                Dot(p,new Color(.7f,.29f,.15f),10);
+                Dot(p,new Color(.7f,.29f,.15f),place.rank<=1?10:6);
+                // Zoomed out, only the city's icons are named.
+                if(place.rank>1 && MapSpan>1400)continue;
                 float width=label.CalcSize(new GUIContent(place.name)).x+8;
                 var rect=new Rect(Mathf.Clamp(p.x+8,0,r.width-width),p.y-10,width,22);
                 for(int attempt=0;attempt<10;attempt++)

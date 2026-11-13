@@ -56,6 +56,19 @@ public static class BuildOpenWorld
         var world=UnityEngine.Object.FindFirstObjectByType<WorldContext>();world.CityMaterial=material;world.ViewDistance=1500;world.CollisionDistance=430;world.Build();
         var game=UnityEngine.Object.FindFirstObjectByType<OpenWorld>();var e=world.Data.extent;
         game.Player.WorldHalfSize=new Vector2(Mathf.Min(-e[0],e[2])-200,Mathf.Min(-e[1],e[3])-200);
+        // Map sheets drawn by Tools/city/overview_map.py: the whole comune and a 1 m/px centre.
+        Texture2D Sheet(string source,string target,out Vector4 extent)
+        {
+            Import("Data/City/map/"+source+".png",Folder+"/"+target+".png");
+            var ti=(TextureImporter)AssetImporter.GetAtPath(Folder+"/"+target+".png");ti.textureCompression=TextureImporterCompression.CompressedHQ;ti.maxTextureSize=4096;ti.mipmapEnabled=true;
+            ti.wrapMode=TextureWrapMode.Clamp;ti.anisoLevel=4;ti.SaveAndReimport();
+            var text=File.ReadAllText("Data/City/map/"+source+".json");
+            float Number(string key){var m=System.Text.RegularExpressions.Regex.Match(text,"\""+key+"\":\\s*(-?[0-9.]+)");return float.Parse(m.Groups[1].Value,System.Globalization.CultureInfo.InvariantCulture);}
+            extent=new Vector4(Number("x0"),Number("z0"),Number("x1"),Number("z1"));
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(Folder+"/"+target+".png");
+        }
+        game.MapTexture=Sheet("overview","CityMap",out game.MapExtent);game.MapDetail=Sheet("centre","CityMapCentre",out game.DetailExtent);
+        EditorUtility.SetDirty(game);
         EditorUtility.SetDirty(world);EditorUtility.SetDirty(game.Player);AssetDatabase.SaveAssets();EditorSceneManager.MarkSceneDirty(scene);EditorSceneManager.SaveScene(scene);
         return new{material=path,world.Buildings,extent=string.Join(",",e),halfSize=game.Player.WorldHalfSize.ToString()};
     }

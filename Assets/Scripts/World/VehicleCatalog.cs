@@ -73,7 +73,7 @@ namespace Padova.World
         public static readonly VehicleSpec Scooter=new()
         {
             Name="Scooter",Label="Scooter",Mass=150,Accel=6.2f,Brake=16,TopSpeed=25,BoostSpeed=29,Reverse=2,Steer=1.85f,Grip=12,
-            Length=1.8f,Width=.7f,Height=1.15f,Wheelbase=1.28f,Track=.3f,WheelRadius=.22f,Wheels=2,TrafficShare=.14f,ParkedShare=.2f,Paints=ScooterPaints
+            Length=1.8f,Width=.7f,Height=1.15f,Wheelbase=1.28f,Track=.3f,WheelRadius=.22f,Wheels=2,ParkedShare=.2f,Paints=ScooterPaints   // no traffic share until traffic has riders
         };
         /// <summary>Three-wheeled Ape: slow, top-heavy and proud of it.</summary>
         public static readonly VehicleSpec Ape=new()

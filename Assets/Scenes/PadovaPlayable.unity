@@ -729,6 +729,7 @@ MonoBehaviour:
   DistanceTravelled: 0
   MinimumAltitude: 93
   Recoveries: 0
+  Half: {x: 1330, y: 1130}
   Propeller: {fileID: 1725922276}
 --- !u!4 &408606986
 Transform:
@@ -1095,7 +1096,7 @@ MonoBehaviour:
   CityMaterial: {fileID: 2100000, guid: 5f7368e89627343f792795f3227e4e94, type: 2}
   Buildings: 100134
   Chunks: 347
-  BuildMilliseconds: 2.4088
+  BuildMilliseconds: 8.3933
 --- !u!4 &571351337
 Transform:
   m_ObjectHideFlags: 0
@@ -3753,7 +3754,7 @@ MonoBehaviour:
   Vertices: 3156517
   Triangles: 1533557
   Chunks: 43
-  BuildMilliseconds: 3631.447
+  BuildMilliseconds: 796.7247
 --- !u!4 &1117771737
 Transform:
   m_ObjectHideFlags: 0
@@ -4991,6 +4992,9 @@ MonoBehaviour:
   VehicleSpeed: 0
   VehicleReversing: 0
   VehicleBoosting: 0
+  VehicleVelocity: {x: 0, y: 0, z: 0}
+  VehicleSize: 1
+  Wobble: 0
   View: 0
 --- !u!1 &1712453020
 GameObject:
@@ -5196,9 +5200,13 @@ MonoBehaviour:
   Traffic: {fileID: 1732967910}
   Activities: {fileID: 1732967909}
   Police: {fileID: 1732967911}
-  MapTexture: {fileID: 2800000, guid: dc73485a254674bebb14c9bf1b553cb2, type: 3}
+  MapTexture: {fileID: 2800000, guid: 76e54d319bda64e80802e33064ce8642, type: 3}
   MapOpen: 0
   Mode: walk
+  MapDetail: {fileID: 2800000, guid: 2f1be53cb853249d6a8d81d7c1fad7b0, type: 3}
+  MapExtent: {x: -5632, y: -7808, z: 8192, w: 6016}
+  DetailExtent: {x: -2048, y: -2048, z: 2048, w: 2048}
+  District: 
   HasWaypoint: 0
   Waypoint: {x: 0, y: 0, z: 0}
   DestinationName: 
