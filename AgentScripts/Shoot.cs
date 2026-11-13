@@ -73,7 +73,9 @@ public static class Shoot
             string label = parts[0].Replace(' ', '-') + "-" + Mathf.RoundToInt(t * 100);
             views.Add(string.Format(CultureInfo.InvariantCulture, "{0}:{1},{2},{3}:{4},{5},{6}", label, eye.x, eye.y, eye.z, target.x, target.y, target.z));
         }
-        return Views(string.Join(";", views), outDir);
+        var files = (List<string>)Views(string.Join(";", views), outDir);
+        files.AddRange(views);   // the poses, so a detail can be re-shot from the same spot
+        return files;
     }
 
     static Vector3 Parse(string s)

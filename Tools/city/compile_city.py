@@ -313,6 +313,8 @@ def classify(units, clip, historic):
                 cls = "rural"
             elif inside:
                 cls = "palazzo" if area > 650 and height >= 11.5 else "townhouse"
+            elif area > BIG_BOX and height < 12.8:
+                cls = "shed"                    # a very large low building with no recorded use: warehouse typology
             elif height >= 32:
                 cls = "office"
             elif height >= 12.8:
@@ -363,6 +365,9 @@ def refine_units(units, info, terrain):
             u.roof = ROOF_FLAT if not historic and rnd(f"flat{u.b}") < 0.5 else ROOF_NONE
 
 
+BIG_BOX = 1600          # m2 of building footprint above which an unclassified low building is treated as a shed
+RISE_CAP = {"church": 14.0}                     # tallest roof (m above the eave) per class; wider spans get a lower pitch
+RISE_CAP_DEFAULT = 7.5
 SLOPE = {"church": 0.45, "shed": 0.14, "sport": 0.16, "station": 0.2, "condo": 0.3, "house": 0.36, "rural": 0.38,
          "minor": 0.25, "commercial": 0.12}
 
@@ -410,10 +415,11 @@ def gable_faces(ring, exposed, slope_hint):
     p = [np.array(v[:2]) for v in ring]
     length = [float(np.hypot(*(p[(k + 1) % 4] - p[k]))) for k in range(4)]
     pair0, pair1 = exposed[0] + exposed[2], exposed[1] + exposed[3]
-    if pair0 == pair1:
-        eave = 0 if length[0] + length[2] >= length[1] + length[3] else 1   # ridge along the longer sides
+    long0, long1 = length[0] + length[2], length[1] + length[3]
+    if pair0 == pair1 or max(long0, long1) > 1.35 * min(long0, long1):
+        eave = 0 if long0 >= long1 else 1                                   # ridge along the longer sides
     else:
-        eave = 0 if pair0 > pair1 else 1
+        eave = 0 if pair0 > pair1 else 1                                    # near-square: eaves face the open sides
     a, b, c, d = (p[(eave + k) % 4] for k in range(4))                      # eaves: a-b and c-d
     r_bc, r_da = (b + c) / 2, (d + a) / 2
 
@@ -693,8 +699,9 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
         top = members[0].roof_top
         own = {m.id for m in members}
         cls_name = CLASSES[members[0].cls]
-        slope = SLOPE.get(cls_name, pc.ROOF_SLOPE)
+        class_slope = SLOPE.get(cls_name, pc.ROOF_SLOPE)
         for skeleton_key, poly in G["group_polys"][gi]:
+            slope = class_slope
 
             def exposed(a, b, top=top, own=own):
                 return roof_exposed(np.asarray(a), np.asarray(b), top, own, units, tree)
@@ -727,6 +734,11 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
             stats["skeletons"] += 1
     blob.w("H", len(roofs))
     for m, top, slope, nodes, faces in roofs:
+        run = max((n[2] for n in nodes), default=0)
+        cap = RISE_CAP.get(CLASSES[m.cls], RISE_CAP_DEFAULT)
+        if run * slope > cap and not m.ridge:
+            slope = cap / run
+            stats["roofsFlattened"] += 1
         blob.w("BIffHH", m.cls, m.b & 0xFFFFFFFF if m.b >= 0 else 0xFFFFFFFF, top, slope, len(nodes), len(faces))
         blob.floats([c for n in nodes for c in n])
         for ids, flags in faces:
