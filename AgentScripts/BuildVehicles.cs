@@ -40,7 +40,7 @@ sealed class Entry { public string name, file; public List<(string name, Vector3
         var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
         if (!mat) { mat = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = name }; AssetDatabase.CreateAsset(mat, path); }
         mat.SetColor("_BaseColor", colour); mat.color = colour; mat.SetFloat("_Smoothness", smooth); mat.SetFloat("_Metallic", metal);
-        if (emission.HasValue) { mat.EnableKeyword("_EMISSION"); mat.SetColor("_EmissionColor", emission.Value); mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None; }
+        if (emission.HasValue) { mat.EnableKeyword("_EMISSION"); mat.SetColor("_EmissionColor", emission.Value); mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.BakedEmissive; }
         mat.enableInstancing = true;
         EditorUtility.SetDirty(mat);
         return mat;

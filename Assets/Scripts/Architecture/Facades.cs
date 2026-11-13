@@ -282,16 +282,26 @@ namespace Padova.Architecture
         internal void Panel(Slot slot, in Frame f, Opening o, float d, bool includeArch = true, float yTop = float.NaN)
         {
             float ys = float.IsNaN(yTop) ? o.Ys : yTop;
+            int first = s.VertexCount;
             Rect(slot, f, o.U0, o.Yb, o.U1, ys, d);
-            if (!includeArch || o.Arch == Arch.None) return;
-            ArchPoints(arch, o);
-            var c = new Vector2(o.Uc, o.Ys);
-            for (int k = 0; k < arch.Count - 1; k++)
+            if (includeArch && o.Arch != Arch.None)
             {
-                var a = arch[k]; var b = arch[k + 1];
-                s.Tri(slot, f.P(c.x, c.y, d), f.P(a.x, a.y, d), f.P(b.x, b.y, d), f.N,
-                    new Vector2(c.x, c.y), new Vector2(a.x, a.y), new Vector2(b.x, b.y));
+                ArchPoints(arch, o);
+                var c = new Vector2(o.Uc, o.Ys);
+                for (int k = 0; k < arch.Count - 1; k++)
+                {
+                    var a = arch[k]; var b = arch[k + 1];
+                    s.Tri(slot, f.P(c.x, c.y, d), f.P(a.x, a.y, d), f.P(b.x, b.y, d), f.N,
+                        new Vector2(c.x, c.y), new Vector2(a.x, a.y), new Vector2(b.x, b.y));
+                }
             }
+            if (slot != Slot.Glass && slot != Slot.ShopGlass) return;
+            // Glass carries no texture: its UV holds 1000 + a random number per window (which panes light up at night) and the height up the pane.
+            var at = f.P(o.Uc, o.Yb, 0);
+            float tag = Mathf.Abs(Mathf.Sin(at.x * 12.9898f + at.y * 37.719f + at.z * 78.233f) * 43758.547f) % 1f;
+            tag = Mathf.Clamp(tag, .001f, .999f);
+            float height = Mathf.Max(.1f, o.Ys - o.Yb + (o.Arch != Arch.None ? (o.U1 - o.U0) * .5f : 0));
+            for (int k = first; k < s.VertexCount; k++) s.Uvs[k] = new Vector2(1000 + tag, (s.Positions[k].y - o.Yb) / height);
         }
 
         internal void Surround(Slot slot, in Frame f, Opening o, float fw, float proud)

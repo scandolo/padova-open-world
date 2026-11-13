@@ -74,6 +74,8 @@ namespace Padova.City
     {
         public TileData Data;
         public CitySink Ground = new CitySink(), Always = new CitySink(), Shell = new CitySink();
+        /// <summary>Pools of lamplight, drawn with the additive glow material after dark.</summary>
+        public CitySink Glow = new CitySink();
         public List<Vector3> ColliderP = new List<Vector3>(2048);
         public List<int> ColliderI = new List<int>(4096);
         public MeshSink Detail;
@@ -202,6 +204,7 @@ namespace Padova.City
         static readonly Surface LampMetal = new Surface(Layer.Plain, .16f, .17f, .18f);
         static readonly Surface LampIron = new Surface(Layer.Plain, .07f, .08f, .08f);
         static readonly Surface LampGlass = new Surface(Layer.Plain, 1f, .86f, .6f);
+        static readonly Surface LampSodium = new Surface(Layer.Plain, 1f, .74f, .44f, 1), LampWarm = new Surface(Layer.Plain, 1f, .66f, .36f, 1);
         static readonly Vector4 Glow = new Vector4(0, 0, -1, 0);
 
         /// <summary>Lane markings, zebra crossings and street lamps along the surveyed centrelines that cross this tile.
@@ -351,6 +354,11 @@ namespace Padova.City
                         Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Glow, Glow, Glow, Glow);
                 sink.Box(LampIron, c + Vector3.up * .28f, right * .23f, Vector3.up * .05f, toRoad * .23f);
             }
+            // The pool of light it throws on the street.
+            float reach = tall ? 11 : 6.5f;
+            var pool = foot + Vector3.up * .2f + toRoad * (tall ? 1.45f : 0);
+            Vector3 px = Vector3.right * reach, pz = Vector3.forward * reach;
+            build.Glow.Quad(tall ? LampSodium : LampWarm, pool - px - pz, pool + px - pz, pool + px + pz, pool - px + pz, Vector3.up, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
             Vector3 x = Vector3.right * .09f, z = Vector3.forward * .09f, up = Vector3.up * 3.2f, b = foot + Vector3.down * .2f;
             ColliderQuad(build, b - x + z, b + x + z, b + x + z + up, b - x + z + up); ColliderQuad(build, b + x - z, b - x - z, b - x - z + up, b + x - z + up);
             ColliderQuad(build, b + x + z, b + x - z, b + x - z + up, b + x + z + up); ColliderQuad(build, b - x - z, b - x + z, b - x + z + up, b - x - z + up);

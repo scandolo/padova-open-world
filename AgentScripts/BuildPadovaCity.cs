@@ -90,7 +90,7 @@ public static class BuildPadovaCity
         m[(int)Slot.VehicleRed]=Lit("Vehicle red",new Color(.52f,.085f,.055f),smooth:.72f,metal:.35f);
         m[(int)Slot.White]=Lit("Painted ivory",new Color(.92f,.89f,.8f),smooth:.55f);
         m[(int)Slot.LampGlow]=Lit("Lantern glass",new Color(1,.78f,.4f),smooth:.55f);
-        m[(int)Slot.LampGlow].EnableKeyword("_EMISSION");m[(int)Slot.LampGlow].SetColor("_EmissionColor",new Color(1,.55f,.16f)*1.4f);
+        m[(int)Slot.LampGlow].EnableKeyword("_EMISSION");m[(int)Slot.LampGlow].globalIlluminationFlags=MaterialGlobalIlluminationFlags.BakedEmissive;m[(int)Slot.LampGlow].SetColor("_EmissionColor",new Color(1,.55f,.16f)*1.4f);
         for (int i = 0; i < 10; i++)
             m[(int)Slot.Plaster0 + i] = Lit("Plaster " + i, Palette[i], "Plaster_Albedo.jpg", "Plaster_Normal.jpg", 3.2f, 0.1f, 0, 0.7f);
         m[(int)Slot.Stone] = Lit("Istrian stone", new Color(0.97f, 0.95f, 0.9f), "IstrianStone_Albedo.jpg", "IstrianStone_Normal.jpg", 1.6f, 0.28f);
@@ -117,7 +117,30 @@ public static class BuildPadovaCity
         m[(int)Slot.Railing] = Lit("Railing", Color.white, "Railing.png", null, 1, 0.4f, 0.5f, 1, true, true);
         m[(int)Slot.Balustrade] = Lit("Balustrade", Color.white, "Balustrade.png", null, 1, 0.25f, 0, 1, true, true);
         m[(int)Slot.Dark] = Lit("Interior shadow", new Color(0.025f, 0.022f, 0.02f), null, null, 1, 0.05f);
+        Glass(m[(int)Slot.Glass], .5f);
+        Glass(m[(int)Slot.ShopGlass], .32f);
         return m;
+    }
+
+    /// <summary>Window panes use the glass shader: sky reflections by day, a share of lit rooms after dark.</summary>
+    static void Glass(Material m, float share)
+    {
+        var colour = m.GetColor("_BaseColor");
+        float smooth = m.GetFloat("_Smoothness");
+        m.shader = Shader.Find("Padova/Glass");
+        m.SetColor("_BaseColor", colour);
+        m.SetFloat("_Smoothness", smooth);
+        m.SetFloat("_Share", share);
+        EditorUtility.SetDirty(m);
+    }
+
+    /// <summary>One-off for scenes built before the glass shader existed: moves the two glass materials onto it.</summary>
+    public static object UpgradeGlass()
+    {
+        Glass(AssetDatabase.LoadAssetAtPath<Material>(Mat + "Window glass.mat"), .5f);
+        Glass(AssetDatabase.LoadAssetAtPath<Material>(Mat + "Shop glass.mat"), .32f);
+        AssetDatabase.SaveAssets();
+        return "glass upgraded";
     }
 
     static void Lighting(Camera camera)

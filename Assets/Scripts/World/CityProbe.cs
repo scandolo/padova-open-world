@@ -25,6 +25,51 @@ namespace Padova.World
             };
         }
 
+        [CliCommand("city_time", "Development-only: read the clock, sound and night-light state; --hour sets the time of day.")]
+        public static object TimeOfDay([CliArg("hour", "Hour of the day, 0-24; omit to read")] float hour = -1, [CliArg("running", "0 stops the clock, 1 starts it")] int running = -1)
+        {
+            var day = DayCycle.Instance;
+            if (!day) return new { ready = false };
+            if (hour >= 0) day.Set(hour);
+            if (running >= 0) day.Running = running > 0;
+            var audio = Object.FindFirstObjectByType<CityAudio>();
+            var lights = Object.FindFirstObjectByType<NightLights>();
+            var sun = RenderSettings.sun;
+            return new
+            {
+                ready = true, hour = day.Hour, night = day.Night, elevation = day.Elevation, clock = day.Clock, skips = day.Skips,
+                sun = sun ? sun.intensity : 0, sunPitch = sun ? sun.transform.eulerAngles.x : 0, headlights = lights && lights.On,
+                sound = audio != null, rpm = audio ? audio.Rpm : 0, gear = audio ? audio.Gear : 0, honks = audio ? audio.Honks : 0, hornHeld = audio && audio.HornHeld,
+                crashes = audio ? audio.Crashes : 0, tolls = audio ? audio.Tolls : 0, volume = AudioListener.volume, paused = AudioListener.pause
+            };
+        }
+
+        [CliCommand("city_drive", "Development-only: put the car being driven on the lane nearest a point anywhere in the comune, facing along it.")]
+        public static object Drive([CliArg("x", "East of the origin (m)", Required = true)] float x, [CliArg("z", "North of the origin (m)", Required = true)] float z)
+        {
+            var game = Object.FindFirstObjectByType<OpenWorld>();
+            if (!game || game.Mode != "drive" || !game.Driving) return new { success = false, reason = "Drive first" };
+            var net = game.Traffic ? game.Traffic.Network : null;
+            var p = new Vector3(x, 0, z);
+            var rotation = game.Driving.transform.rotation;
+            if (net != null)
+            {
+                var (lane, s, _) = net.Nearest(p, true);
+                if (lane >= 0)
+                {
+                    p = net.Sample(lane, s, out var tangent);
+                    tangent.y = 0;
+                    if (tangent.sqrMagnitude > .001f) rotation = Quaternion.LookRotation(tangent);
+                }
+            }
+            game.City.Streamer.Prepare(p);
+            Physics.SyncTransforms();
+            p.y = game.SurfaceAt(p) + .3f;
+            game.Driving.Place(p, rotation);
+            game.Player.FollowCamera.ResetCamera();
+            return new { success = true, position = new[] { p.x, p.y, p.z } };
+        }
+
         [CliCommand("city_teleport", "Development-only: put the walking player on the ground at a point anywhere in the comune.")]
         public static object Teleport([CliArg("x", "East of the origin (m)", Required = true)] float x, [CliArg("z", "North of the origin (m)", Required = true)] float z)
         {

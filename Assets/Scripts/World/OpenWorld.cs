@@ -26,8 +26,12 @@ namespace Padova.World
         /// <summary>Crash feedback: number of hard knocks answered with a camera jolt and a beat of slow motion.</summary>
         public int CrashJolts{get;private set;}
         int impactSeen;CityCar impactCar;float slowUntil;
+        /// <summary>The world in play; null in menus-only scenes and after the scene unloads.</summary>
+        public static OpenWorld Current{get;private set;}
+        /// <summary>A full-screen menu (title, pause) is up.</summary>
+        public bool Menu;
         /// <summary>True while the map (or anything else modal) has stopped the simulation.</summary>
-        public bool Halted=>MapOpen;
+        public bool Halted=>MapOpen||Menu;
         public Vector3 Position=>Mode=="drive"&&Driving?Driving.transform.position:Mode=="fly"?Plane.transform.position:Player.transform.position;
         public Rect MapRect=>new Rect(240,140,1120,680);
         /// <summary>Map sheet for a view: the detailed centre sheet when the view fits inside it, the whole comune otherwise.</summary>
@@ -39,6 +43,7 @@ namespace Padova.World
         }
         void Awake()
         {
+            Current=this;
             InputAction Button(string name,string binding,System.Action action){var a=new InputAction(name,InputActionType.Button,binding);a.performed+=_=>action();a.Enable();return a;}
             mapAction=Button("Map","<Keyboard>/m",()=>mapRequested=true);
             interactAction=Button("Enter car","<Keyboard>/e",()=>interactRequested=true);interactAction.AddBinding("<Keyboard>/enter");interactAction.AddBinding("<Keyboard>/numpadEnter");
@@ -303,9 +308,9 @@ namespace Padova.World
         }
         void Help()
         {
-            string[][] rows=Mode=="drive"?new[]{new[]{"W A S D / ↑ ← ↓ →","Drive and steer"},new[]{"SHIFT","Turbo"},new[]{"SPACE","Handbrake"},new[]{"E","Get out"},new[]{"R","Reset car"},new[]{"C","Camera view"},new[]{"M","Map"},new[]{"J","Activities"}}
+            string[][] rows=Mode=="drive"?new[]{new[]{"W A S D / ↑ ← ↓ →","Drive and steer"},new[]{"SHIFT","Turbo"},new[]{"SPACE","Handbrake"},new[]{"E","Get out"},new[]{"Q","Horn"},new[]{"R","Reset car"},new[]{"C","Camera view"},new[]{"T","Time of day"},new[]{"M","Map"},new[]{"J","Activities"}}
                 :Mode=="fly"?new[]{new[]{"↑ ↓","Climb / descend"},new[]{"← →","Bank"},new[]{"SHIFT / SPACE","Faster / slower"},new[]{"F","Land and walk"},new[]{"M","Map"}}
-                :new[]{new[]{"W A S D / ↑ ← ↓ →","Walk"},new[]{"SHIFT","Sprint"},new[]{"SPACE","Jump"},new[]{"E","Drive / steal a car"},new[]{"F","Sightseeing flight"},new[]{"MOUSE DRAG","Look around"},new[]{"C","Camera view"},new[]{"M","Map"},new[]{"J","Activities"}};
+                :new[]{new[]{"W A S D / ↑ ← ↓ →","Walk"},new[]{"SHIFT","Sprint"},new[]{"SPACE","Jump"},new[]{"E","Drive / steal a car"},new[]{"F","Sightseeing flight"},new[]{"MOUSE DRAG","Look around"},new[]{"C","Camera view"},new[]{"T","Time of day"},new[]{"M","Map"},new[]{"J","Activities"}};
             float h=78+rows.Length*36;var r=new Rect(1180,150,390,h);Hud.Panel(r,Hud.Ink);
             Hud.Text(new Rect(r.x+24,r.y+16,340,40),"CONTROLS",34,Hud.Gold,TextAnchor.UpperLeft,false,true);Hud.Text(new Rect(r.x+24,r.y+20,342,30),"H to hide",15,Hud.Muted,TextAnchor.UpperRight);
             for(int i=0;i<rows.Length;i++){float y=r.y+66+i*36;Hud.Text(new Rect(r.x+24,y,170,30),rows[i][0],17,Hud.Cream,TextAnchor.MiddleLeft,true);Hud.Text(new Rect(r.x+196,y,180,30),rows[i][1],18,Color.white,TextAnchor.MiddleLeft);}
@@ -350,6 +355,6 @@ namespace Padova.World
             Hud.Text(new Rect(214,834,960,26),"Drag to pan   ·   Scroll to zoom   ·   Click to set a waypoint   ·   Blue: cars   ·   Red: police",18,Hud.Muted,TextAnchor.UpperLeft,true);
             if(Button(new Rect(1190,826,195,40),"C","Centre on me"))MapCentre=new Vector2(Position.x,Position.z);
         }
-        void OnDestroy(){Time.timeScale=1;mapAction?.Dispose();interactAction?.Dispose();flightAction?.Dispose();resetAction?.Dispose();escapeAction?.Dispose();clickAction?.Dispose();helpAction?.Dispose();}
+        void OnDestroy(){if(Current==this)Current=null;Time.timeScale=1;mapAction?.Dispose();interactAction?.Dispose();flightAction?.Dispose();resetAction?.Dispose();escapeAction?.Dispose();clickAction?.Dispose();helpAction?.Dispose();}
     }
 }

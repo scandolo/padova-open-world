@@ -81,7 +81,9 @@ namespace Padova.City
             return new StreetInput { Edges = edges, Graph = roads, NodeWidth = nodeWidth, Core = Pack.Index.coreExtent, Tile = Pack.Tile };
         }
         Texture2DArray layers;
-        Material runtimeMaterial;
+        Material runtimeMaterial, glowMaterial;
+        bool glowing;
+        static readonly int NightId = Shader.PropertyToID("_PadovaNight");
         Transform root;
         float nextScan;
         Vector3 lastFocus = new Vector3(float.MaxValue, 0, 0);
@@ -92,8 +94,8 @@ namespace Padova.City
         {
             public int Tx, Tz;
             public float Distance;
-            public GameObject Root, ShellGo, DetailGo;
-            public Mesh Ground, Always, Shell, Detail, Collider;
+            public GameObject Root, ShellGo, DetailGo, GlowGo;
+            public Mesh Ground, Always, Shell, Detail, Collider, Glow;
             public MeshCollider GroundCollider, WallCollider;
             public TileData Data;
             public Task<TileBuild> ShellJob, DetailJob;
@@ -126,6 +128,8 @@ namespace Padova.City
             runtimeMaterial.hideFlags = HideFlags.DontSave;
             runtimeMaterial.SetTexture("_Layers", layers);
             runtimeMaterial.SetFloat("_WaterLayer", (float)Layer.Water);
+            var glow = Shader.Find("Padova/CityGlow");
+            if (glow) glowMaterial = new Material(glow) { hideFlags = HideFlags.DontSave };
             return true;
         }
 
@@ -133,8 +137,8 @@ namespace Padova.City
         {
             foreach (var tile in tiles.Values) Unload(tile);
             tiles.Clear();
-            Kill(root ? root.gameObject : null); Kill(layers); Kill(runtimeMaterial);
-            root = null; layers = null; runtimeMaterial = null; Pack = null;
+            Kill(root ? root.gameObject : null); Kill(layers); Kill(runtimeMaterial); Kill(glowMaterial);
+            root = null; layers = null; runtimeMaterial = null; glowMaterial = null; Pack = null;
             Tiles = DetailTiles = ColliderTiles = Pending = 0; Vertices = 0;
             lastFocus = new Vector3(float.MaxValue, 0, 0);
         }
@@ -157,6 +161,13 @@ namespace Padova.City
             var camera = Camera.main;
             if (!camera) return;
             var focus = camera.transform.position;
+            // Lamplight is only drawn after dark.
+            bool night = Shader.GetGlobalFloat(NightId) > .02f;
+            if (night != glowing)
+            {
+                glowing = night;
+                foreach (var tile in tiles.Values) if (tile.GlowGo) tile.GlowGo.SetActive(night);
+            }
             if (Time.unscaledTime >= nextScan || (focus - lastFocus).sqrMagnitude > 32 * 32)
             {
                 nextScan = Time.unscaledTime + .25f;
@@ -373,6 +384,13 @@ namespace Padova.City
             Part(tile, "Roofs and gardens", tile.Always, 0, true);
             tile.Shell = build.Shell.ToMesh("Distant walls");
             tile.ShellGo = Part(tile, "Distant walls", tile.Shell, 0, true);
+            if (build.Glow.Count > 0 && glowMaterial)
+            {
+                tile.Glow = build.Glow.ToMesh("Lamplight");
+                tile.GlowGo = Part(tile, "Lamplight", tile.Glow, 0, false);
+                tile.GlowGo.GetComponent<MeshRenderer>().sharedMaterial = glowMaterial;
+                tile.GlowGo.SetActive(glowing || !Application.isPlaying && Shader.GetGlobalFloat(NightId) > .02f);
+            }
             tile.Collider = new Mesh { name = "Wall collider", indexFormat = build.ColliderP.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16, hideFlags = HideFlags.DontSave };
             tile.Collider.SetVertices(build.ColliderP);
             tile.Collider.SetTriangles(build.ColliderI, 0, true);
@@ -398,7 +416,7 @@ namespace Padova.City
         void Unload(Tile tile)
         {
             Vertices -= tile.Vertices;
-            Kill(tile.Root); Kill(tile.Ground); Kill(tile.Always); Kill(tile.Shell); Kill(tile.Detail); Kill(tile.Collider);
+            Kill(tile.Root); Kill(tile.Ground); Kill(tile.Always); Kill(tile.Shell); Kill(tile.Detail); Kill(tile.Collider); Kill(tile.Glow);
             tile.Loaded = false;
         }
     }

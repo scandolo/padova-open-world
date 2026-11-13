@@ -195,7 +195,7 @@ public static class BuildPlayablePadova
         marker.transform.localScale=new Vector3(1.1f,0.035f,1.1f);
         UnityEngine.Object.DestroyImmediate(marker.GetComponent<Collider>());
         var gold=Material("Destination",new Color(0.97f,0.63f,0.14f));
-        gold.EnableKeyword("_EMISSION");gold.SetColor("_EmissionColor",new Color(0.5f,0.22f,0.02f));
+        gold.EnableKeyword("_EMISSION");gold.globalIlluminationFlags=MaterialGlobalIlluminationFlags.BakedEmissive;gold.SetColor("_EmissionColor",new Color(0.5f,0.22f,0.02f));
         marker.GetComponent<Renderer>().sharedMaterial=gold;
         var hud=player.AddComponent<WalkHud>();hud.Player=motor;hud.GoalMarker=marker.transform;
         var light=UnityEngine.Object.FindFirstObjectByType<Light>();

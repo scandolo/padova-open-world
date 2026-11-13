@@ -61,6 +61,7 @@ Shader "Padova/City"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
             #pragma multi_compile_fog
 
             struct Varyings
@@ -119,7 +120,7 @@ Shader "Padova/City"
                 // ---- lamp glass: pale by day, lit at night (facade.z < 0 marks it)
                 if (i.facade.z < -0.5)
                 {
-                    emission = albedo * (0.15 + 2.6 * _PadovaNight);
+                    emission = albedo * half3(1.0, 0.8, 0.55) * (0.15 + 1.9 * _PadovaNight);
                 }
                 // ---- procedural façade
                 if (i.facade.z > 0.001)
@@ -168,7 +169,17 @@ Shader "Padova/City"
                     direct *= ao.directAmbientOcclusion;
                 #endif
                 half ndl = saturate(dot(n, main.direction));
-                half3 color = albedo * (ambient + direct * ndl) + emission;
+                half3 lighting = ambient + direct * ndl;
+                #if defined(_ADDITIONAL_LIGHTS)
+                    // Headlights and other local lights.
+                    uint count = GetAdditionalLightsCount();
+                    for (uint k = 0u; k < count; k++)
+                    {
+                        Light extra = GetAdditionalLight(k, i.positionWS);
+                        lighting += extra.color * (extra.distanceAttenuation * saturate(dot(n, extra.direction)));
+                    }
+                #endif
+                half3 color = albedo * lighting + emission;
                 half3 halfway = normalize(main.direction + view);
                 color += direct * gloss * pow(saturate(dot(n, halfway)), 90.0) * 0.6;
                 color = MixFog(color, i.fog);
