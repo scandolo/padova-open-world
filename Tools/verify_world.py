@@ -228,6 +228,8 @@ def parked_case():
     parked=lambda:v.call('city_parked')
     reset();moved=v.call('city_teleport','--x',651.7,'--z',1687.2);assert moved['success'],moved
     street=wait(parked,lambda p:p['ready'] and p['standing']>=10,20)
+    # People on the pavements too: a pool of walkers follows the player and keeps moving.
+    people=wait(parked,lambda p:p['walkers']>=10,20);strolled=wait(parked,lambda p:p['walked']>people['walked']+8,15)
     beside=wait(lambda:v.call('city_parked','--near',1),lambda p:p['within']!='',10)
     time.sleep(.6);prompt=v.capture('world/parked-native.png')
     v.press('E');driving=until(lambda s:s['mode']=='drive')
@@ -235,7 +237,7 @@ def parked_case():
     v.down('UpArrow')
     try:until(lambda s:s['carSpeed']>3,8)
     finally:v.up('UpArrow')
-    return {'standing':street['standing'],'blockedBays':street['blocked'],'took':after['vehicle'],'screenshot':prompt}
+    return {'standing':street['standing'],'blockedBays':street['blocked'],'took':after['vehicle'],'walkers':strolled['walkers'],'walkedMetres':strolled['walked'],'screenshot':prompt}
 
 def night_case():
     # The clock, the lights and the sound: T skips ahead, headlights follow the dark, the engine works through its gears, Q is the horn.

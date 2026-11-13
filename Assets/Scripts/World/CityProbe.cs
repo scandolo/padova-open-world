@@ -59,8 +59,10 @@ namespace Padova.World
                 controller.enabled = false; game.Player.transform.position = p; controller.enabled = true;
                 game.Player.VerticalSpeed = -1; game.Player.FollowCamera.ResetCamera();
             }
+            var walkers = Object.FindFirstObjectByType<StreetWalkers>();
             return new
             {
+                walkers = walkers ? walkers.Walking : 0, walked = walkers ? walkers.Travel : 0, dodges = walkers ? walkers.Dodges : 0,
                 ready = true, standing = parked.Standing, taken = parked.Taken, knocked = parked.Knocked, blocked = parked.Blocked, cars = game.Cars.Length,
                 nearest = nearest ? nearest.Spec.Name : "", distance = nearest ? Vector3.Distance(nearest.transform.position, game.Position) : -1,
                 within = game.NearbyParked ? game.NearbyParked.Spec.Name : "", vehicle = game.Driving ? game.Driving.Spec.Name : "",

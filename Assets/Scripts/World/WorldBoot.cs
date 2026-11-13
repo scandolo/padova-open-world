@@ -28,6 +28,7 @@ namespace Padova.World
             Add<FarGround>("Far ground").Game = game;
             game.Parked = Add<ParkedCars>("Parked vehicles");
             game.Parked.Game = game;
+            Add<StreetWalkers>("Street walkers").Game = game;
             // Sound is built with the game reference in place before its Awake runs.
             var audio = new GameObject("City audio");
             audio.SetActive(false);
