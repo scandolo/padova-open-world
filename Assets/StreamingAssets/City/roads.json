@@ -1,0 +1,549 @@
+{
+ "version": 1,
+ "nodes": 8510,
+ "edges": 10341,
+ "vertices": 52817,
+ "names": 2074,
+ "km": 998.55,
+ "byClass": {
+  "alley": {
+   "edges": 1890,
+   "km": 186.6
+  },
+  "local": {
+   "edges": 5441,
+   "km": 480.79
+  },
+  "main": {
+   "edges": 1655,
+   "km": 157.48
+  },
+  "fast": {
+   "edges": 598,
+   "km": 108.94
+  },
+  "pedestrian": {
+   "edges": 757,
+   "km": 64.75
+  }
+ },
+ "bbox": [
+  -5063.8,
+  -7277.5,
+  8013.2,
+  5462.4
+ ],
+ "nodeKinds": {
+  "plain": 6136,
+  "trafficSignal": 131,
+  "miniRoundabout": 10,
+  "deadEnd": 2233
+ },
+ "flags": {
+  "oneWay": 2146,
+  "bridge": 424,
+  "underpass": 226,
+  "roundabout": 180,
+  "tram": 166
+ },
+ "width": {
+  "source": {
+   "AC_VEI": 9890,
+   "AR_STR": 332,
+   "default": 23,
+   "AC_PED+A_PED": 96
+  },
+  "percentiles": {
+   "5": 2.95,
+   "25": 5.1,
+   "50": 6.75,
+   "75": 9.34,
+   "95": 19.37
+  }
+ },
+ "osm": {
+  "timestamp": "2026-11-13T11:12:39Z",
+  "matchedEdges": 9500,
+  "matchedShareOfEdges": 0.9187,
+  "matchedKm": 955.17,
+  "matchedShareOfKm": 0.9566,
+  "matchedAsWalkOnly": 253,
+  "pedestrianBecause": {
+   "osm limited access": 256,
+   "osm pedestrian street": 159,
+   "osm walk-only": 238,
+   "surveyed pedestrian area": 104
+  },
+  "lanesFromOsm": 3941,
+  "maxspeedFromOsm": 2553,
+  "oneWayFlagsDroppedForConnectivity": 32,
+  "nodesOutsideMainStrongComponent": 222,
+  "oneWayStubNodes": [
+   310,
+   328,
+   693,
+   694,
+   757,
+   758,
+   824,
+   825,
+   829,
+   830,
+   831,
+   862,
+   863,
+   1156,
+   1157,
+   1199,
+   1200,
+   1204,
+   1205,
+   1226,
+   1227,
+   1279,
+   1280,
+   1311,
+   1338,
+   1339,
+   1464,
+   1465,
+   1640,
+   1658,
+   1659,
+   1661,
+   1662,
+   1675,
+   1676,
+   1681,
+   1689,
+   1691,
+   1692,
+   1693,
+   1694,
+   1718,
+   1719,
+   1731,
+   1732,
+   2166,
+   2185,
+   2186,
+   2192,
+   2233,
+   2242,
+   2251,
+   2258,
+   2334,
+   2607,
+   2608,
+   2751,
+   2752,
+   2770,
+   2771,
+   2795,
+   2807,
+   2815,
+   2816,
+   3358,
+   3359,
+   3582,
+   3593,
+   3594,
+   3674,
+   3750,
+   3795,
+   3868,
+   3869,
+   3921,
+   4079,
+   4080,
+   4157,
+   4158,
+   4162,
+   4273,
+   4631,
+   4632,
+   4869,
+   4870,
+   4937,
+   4939,
+   5075,
+   5076,
+   5297,
+   5298,
+   5384,
+   5385,
+   5386,
+   5445,
+   5450,
+   5511,
+   5512,
+   5710,
+   5711,
+   5820,
+   5880,
+   5881,
+   5882,
+   5905,
+   5909,
+   5910,
+   5968,
+   5969,
+   5970,
+   5973,
+   5974,
+   5976,
+   5981,
+   6039,
+   6079,
+   6138,
+   6142,
+   6143,
+   6159,
+   6160,
+   6162,
+   6163,
+   6241,
+   6297,
+   6298,
+   6306,
+   6325,
+   6340,
+   6492,
+   6493,
+   6574,
+   6777,
+   6882,
+   7028,
+   7029,
+   7740,
+   7741,
+   7743,
+   7745,
+   7746,
+   7756,
+   7757,
+   7765,
+   8034,
+   8082,
+   8117,
+   8118,
+   8120,
+   8121,
+   8123,
+   8124,
+   8125,
+   8127,
+   8150,
+   8152,
+   8153,
+   8154,
+   8162,
+   8163,
+   8167,
+   8172,
+   8174,
+   8175,
+   8190,
+   8224,
+   8225,
+   8226,
+   8227,
+   8242,
+   8243,
+   8244,
+   8253,
+   8254,
+   8260,
+   8261,
+   8262,
+   8263,
+   8264,
+   8265,
+   8266,
+   8274,
+   8275,
+   8276,
+   8306,
+   8307,
+   8308,
+   8319,
+   8320,
+   8321,
+   8322,
+   8323,
+   8324,
+   8326,
+   8327,
+   8360,
+   8361,
+   8362,
+   8363,
+   8364,
+   8365,
+   8366,
+   8367,
+   8368,
+   8369,
+   8370,
+   8371,
+   8372,
+   8373,
+   8374,
+   8388,
+   8389,
+   8390,
+   8391,
+   8392,
+   8393,
+   8500,
+   8501,
+   8502,
+   8503,
+   8504,
+   8505
+  ],
+  "match": {
+   "radius": 8.0,
+   "angle": 25.0,
+   "cover": 0.6
+  },
+  "miniRoundabouts": {
+   "osmNodes": 14,
+   "snapped": 10,
+   "graphNodes": 10
+  },
+  "trafficSignals": {
+   "osmNodes": 251,
+   "snapped": 235,
+   "graphNodes": 131
+  }
+ },
+ "streetNames": {
+  "toponyms": 2074,
+  "spelledAsInOsm": 1992,
+  "unnamedEdges": 106,
+  "namedByStreetArea": 18
+ },
+ "survey": {
+  "sourceElements": 10454,
+  "sourceJunctions": 8633,
+  "snapTolerance": 0.05,
+  "endpointPairsSnappedApart": [
+   0.0141
+  ],
+  "nodesFartherThan1mmFromAJunction": 3,
+  "gapLinks": [
+   {
+    "gap": 0.58,
+    "x": -217.6,
+    "z": -244.3,
+    "code": 9801
+   }
+  ],
+  "sourceKm": 1010.737,
+  "components": {
+   "count": 15,
+   "mainShareOfLength": 0.98794,
+   "dropped": [
+    {
+     "edges": 52,
+     "metres": 4003.8,
+     "x": 2255.4,
+     "z": 4317.5,
+     "codes": [
+      11550,
+      15004,
+      20305,
+      22808,
+      40251,
+      54405,
+      74351,
+      81254,
+      88909
+     ],
+     "metresFromComuneBoundary": 0.0,
+     "metresFromMainGraph": 107.9,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 12,
+     "metres": 1495.7,
+     "x": 3022.2,
+     "z": -3791.3,
+     "codes": [
+      44101,
+      61757,
+      62352
+     ],
+     "metresFromComuneBoundary": 4.5,
+     "metresFromMainGraph": 11.2,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 7,
+     "metres": 1272.4,
+     "x": 2806.2,
+     "z": -6751.3,
+     "codes": [
+      4675,
+      65098,
+      72292
+     ],
+     "metresFromComuneBoundary": 0.0,
+     "metresFromMainGraph": 0.0,
+     "bridgeEdges": 0,
+     "underpassEdges": 3
+    },
+    {
+     "edges": 7,
+     "metres": 1266.9,
+     "x": 2797.5,
+     "z": -6744.0,
+     "codes": [
+      4675,
+      7492,
+      65098,
+      72292
+     ],
+     "metresFromComuneBoundary": 0.0,
+     "metresFromMainGraph": 0.0,
+     "bridgeEdges": 0,
+     "underpassEdges": 3
+    },
+    {
+     "edges": 20,
+     "metres": 1029.3,
+     "x": 2083.4,
+     "z": -4385.0,
+     "codes": [
+      15059
+     ],
+     "metresFromComuneBoundary": 0.0,
+     "metresFromMainGraph": 21.6,
+     "bridgeEdges": 8,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 3,
+     "metres": 619.1,
+     "x": 357.7,
+     "z": -4370.1,
+     "codes": [
+      99999
+     ],
+     "metresFromComuneBoundary": 688.6,
+     "metresFromMainGraph": 9.0,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 587.9,
+     "x": -681.6,
+     "z": 4212.1,
+     "codes": [
+      1807
+     ],
+     "metresFromComuneBoundary": 665.7,
+     "metresFromMainGraph": 10.5,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 566.4,
+     "x": -2104.0,
+     "z": -706.1,
+     "codes": [
+      61601
+     ],
+     "metresFromComuneBoundary": 1704.2,
+     "metresFromMainGraph": 6.6,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 454.9,
+     "x": 4427.4,
+     "z": 1232.8,
+     "codes": [
+      25432
+     ],
+     "metresFromComuneBoundary": 119.6,
+     "metresFromMainGraph": 0.0,
+     "bridgeEdges": 1,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 397.8,
+     "x": 4412.2,
+     "z": 1222.5,
+     "codes": [
+      99999
+     ],
+     "metresFromComuneBoundary": 136.5,
+     "metresFromMainGraph": 0.0,
+     "bridgeEdges": 1,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 167.8,
+     "x": 5606.4,
+     "z": -914.8,
+     "codes": [
+      6402
+     ],
+     "metresFromComuneBoundary": 626.0,
+     "metresFromMainGraph": 4.4,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 5,
+     "metres": 154.3,
+     "x": 7312.4,
+     "z": -798.8,
+     "codes": [
+      87054
+     ],
+     "metresFromComuneBoundary": 7.4,
+     "metresFromMainGraph": 126.1,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 138.7,
+     "x": -777.5,
+     "z": -3098.3,
+     "codes": [
+      27632
+     ],
+     "metresFromComuneBoundary": 0.0,
+     "metresFromMainGraph": 52.3,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    },
+    {
+     "edges": 1,
+     "metres": 32.5,
+     "x": 7088.5,
+     "z": -797.5,
+     "codes": [
+      87054
+     ],
+     "metresFromComuneBoundary": 6.4,
+     "metresFromMainGraph": 29.0,
+     "bridgeEdges": 0,
+     "underpassEdges": 0
+    }
+   ]
+  }
+ },
+ "attribution": "Geometry, connectivity, names, widths: Comune di Padova / Regione del Veneto, DBT 2007, IODL 2.0. One-way, lanes, maxspeed, roundabouts, class, signals: OpenStreetMap contributors, ODbL."
+}
