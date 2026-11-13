@@ -129,6 +129,8 @@ namespace Padova.World
             else if(name=="at")
             {
                 var p=new Vector3(x,200,z);
+                // The city streams around the player: make the destination solid before standing on it.
+                if(g.City.Streamer){g.City.Streamer.Prepare(new Vector3(x,g.City.Data.GroundAt(x,z),z));Physics.SyncTransforms();}
                 if(!Physics.Raycast(p,Vector3.down,out var hit,400,(1<<8)|(1<<9)))throw new InvalidOperationException("No ground at "+x+","+z);
                 var controller=g.Player.GetComponent<CharacterController>();controller.enabled=false;g.Player.transform.position=hit.point+Vector3.up*.04f;controller.enabled=true;
                 g.Player.VerticalSpeed=-2;g.Player.FollowCamera.SetTestHeading(yaw);g.Player.Visual.rotation=Quaternion.Euler(0,yaw,0);

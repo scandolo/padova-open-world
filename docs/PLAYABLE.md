@@ -90,3 +90,11 @@ Short performance samples are not a sustained thermal benchmark. A representativ
 - Foreground native checks passed for map and driving. Further checks encountered macOS focus loss, including the existing flight scenario. The new-feature native gate completed with a temporary, in-memory Input System `IgnoreFocus` setting; saved settings were unchanged by that workaround. Test wallet and race records were restored.
 - Final short sample: 60 FPS, 16.15 ms GPU, 559.7 MB Unity-allocated memory. These RPC-driven samples do not establish sustained performance.
 - Evidence: `.context/activity-editmode-tests.json`, `.context/world/activities-native-verification.json`, and `.context/world/activities-menu-native.png`. These files and the local build are gitignored.
+
+## Whole-city verification, 2026-11-14
+
+- 40 EditMode tests passed (city packs, road graph, parking geometry, sound synthesis, the sun's path, driving maths, landmarks, scene). 23 Python checks on the compiled packs, road graph and addresses passed.
+- The macOS Development Player was built and run **hidden** (`Tools/verify_world.py --headless`, no window, no sound). All 24 scenarios passed: animation, controls, locomotion, jump, collision, recovery, map, car, drive, flight, crowd, traffic, taxi, race, police, night (clock skip, headlights, revs and gears, horn), parked (take a kerbside vehicle, walkers on the pavements), menu (title, pause, presets, controls sheet), jobs (a delivery run to three real addresses, a landmark sprint), secrets (a hen caught on foot, a spritz and an espresso bought, the three "senza", the cheat code), landmarks, santo, prato and visual.
+- Fixtures are recorded in each result: cars are placed at job stops and checkpoints, and the player is placed beside a hen, a bar and the three places. Collection, timing, pay, catching and the secrets themselves are game logic driven by real key input.
+- Short samples on the Balanced preset at 1600 × 1000: 60 FPS with 12.5–13.6 ms of GPU time in the centre. These are seconds-long windows in a hidden Player, not a sustained or thermal benchmark; the 20-minute M4 Air session remains an acceptance gate.
+- Sound was checked by measurement (levels, loop seams, energy per band), not by ear: every automated run is muted.
