@@ -18,8 +18,8 @@ namespace Padova.World
             Engine = Clip("Engine", Harmonics(2, 55, 16, k => (k % 2 == 0 ? 1f : .6f) / Mathf.Pow(k, .9f), new[] { .5f, 1.5f }, new[] { .35f, .22f }, .05f), true);
             Buzz = Clip("Two-stroke", Harmonics(2, 90, 20, k => 1f / Mathf.Pow(k, .6f), new[] { .5f }, new[] { .5f }, .08f), true);
             Diesel = Clip("Diesel", DieselLoop(), true);
-            Skid = Clip("Tyres", Seam(Band(Noise(2f, 11), 900, 2600), .25f), true);
-            Wind = Clip("Wind", Seam(Band(Noise(2.5f, 12), 60, 520), .3f), true);
+            Skid = Clip("Tyres", Seam(Band(Noise(2f, 11), 800, 2100), .25f), true);
+            Wind = Clip("Wind", Seam(Band(Noise(2.5f, 12), 60, 420), .3f), true);
             Horn = Clip("Horn", Tones(.5f, new[] { 420f, 524f }, 8), true);
             Meep = Clip("Small horn", Tones(.5f, new[] { 740f }, 9, true), true);
             Siren = Clip("Siren", SirenLoop(), true);
@@ -41,7 +41,7 @@ namespace Padova.World
             }), false);
             Blip = Clip("Blip", Shot(.14f, (t, i) => Mathf.Sin(6.2832f * 880 * t) * Mathf.Exp(-t * 28)), false);
             Deny = Clip("Deny", Shot(.34f, (t, i) => (Mathf.Sin(6.2832f * 130 * t) > 0 ? .5f : -.5f) * Mathf.Exp(-t * 6) * Mathf.Clamp01(t * 200)), false);
-            Hum = Clip("City hum", Seam(Band(Noise(6, 13), 25, 190), .6f), true);
+            Hum = Clip("City hum", Seam(Band(Noise(6, 13), 30, 150), .6f), true);
             Birds = Clip("Birds", BirdLoop(), true);
             Crickets = Clip("Crickets", Shot(4, (t, i) =>
             {
@@ -81,11 +81,16 @@ namespace Padova.World
             return d;
         }
 
-        /// <summary>One-pole high-pass then low-pass: enough shaping for wind, tyres and distant traffic.</summary>
-        static float[] Band(float[] d, float low, float high)
+        /// <summary>One-pole high-pass and low-pass, run <paramref name="order"/> times: a single pass leaves noise hissy,
+        /// three give wind, tyres and the city's rumble a firm ceiling.</summary>
+        static float[] Band(float[] d, float low, float high, int order = 3)
         {
-            float a = 1 - Mathf.Exp(-6.2832f * high / Rate), b = 1 - Mathf.Exp(-6.2832f * low / Rate), lp = 0, hp = 0;
-            for (int i = 0; i < d.Length; i++) { lp += a * (d[i] - lp); hp += b * (lp - hp); d[i] = lp - hp; }
+            float a = 1 - Mathf.Exp(-6.2832f * high / Rate), b = 1 - Mathf.Exp(-6.2832f * low / Rate);
+            for (int pass = 0; pass < order; pass++)
+            {
+                float lp = 0, hp = 0;
+                for (int i = 0; i < d.Length; i++) { lp += a * (d[i] - lp); hp += b * (lp - hp); d[i] = lp - hp; }
+            }
             return d;
         }
 
@@ -119,22 +124,26 @@ namespace Padova.World
                 float w = 6.2832f * firing * orders[o] / Rate;
                 for (int i = 0; i < n; i++) d[i] += orderAmplitude[o] * Mathf.Sin(w * i);
             }
-            var air = Seam(Band(Noise(seconds + .2f, 3), 300, 3000), .2f);
-            for (int i = 0; i < n; i++) d[i] = (float)Math.Tanh(d[i] * .7f) + air[i] * hiss * 6;
+            var air = Seam(Band(Noise(seconds + .2f, 3), 250, 1800, 2), .2f);
+            float level = 0;
+            foreach (float v in air) level = Mathf.Max(level, Mathf.Abs(v));
+            for (int i = 0; i < n; i++) d[i] = (float)Math.Tanh(d[i] * .7f) + air[i] / level * hiss;
             return d;
         }
 
         static float[] DieselLoop()
         {
             int n = 2 * Rate;
-            var clatter = Seam(Band(Noise(2.2f, 7), 500, 3200), .2f);
+            var clatter = Seam(Band(Noise(2.2f, 7), 500, 2400, 2), .2f);
+            float level = 0;
+            foreach (float v in clatter) level = Mathf.Max(level, Mathf.Abs(v));
             var d = new float[n];
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)Rate, knock = Mathf.Pow(.5f + .5f * Mathf.Sin(6.2832f * 40 * t), 6);
                 float tone = 0;
                 for (int k = 1; k <= 8; k++) tone += Mathf.Sin(6.2832f * 40 * k * t + k) / k;
-                d[i] = tone * .6f + Mathf.Sin(6.2832f * 20 * t) * .4f + clatter[i] * knock * 9;
+                d[i] = tone * .6f + Mathf.Sin(6.2832f * 20 * t) * .4f + clatter[i] / level * knock * .7f;
             }
             return d;
         }
@@ -166,11 +175,13 @@ namespace Padova.World
 
         static float[] CrashShot()
         {
-            var noise = Band(Noise(.9f, 21), 80, 3200);
+            var noise = Band(Noise(.9f, 21), 80, 3200, 2);
+            float level = 0;
+            foreach (float v in noise) level = Mathf.Max(level, Mathf.Abs(v));
             float[] ring = { 523, 1187, 1873, 2637, 3411 }, decay = { 10, 12, 15, 18, 22 };
             return Shot(.9f, (t, i) =>
             {
-                float v = noise[i] * 5 * Mathf.Exp(-t * 9) + Mathf.Sin(6.2832f * (90 - 50 * t) * t) * Mathf.Exp(-t * 14);
+                float v = noise[i] / level * 1.2f * Mathf.Exp(-t * 9) + Mathf.Sin(6.2832f * (90 - 50 * t) * t) * Mathf.Exp(-t * 14);
                 for (int k = 0; k < ring.Length; k++) v += .12f * Mathf.Sin(6.2832f * ring[k] * t) * Mathf.Exp(-t * decay[k]);
                 return v;
             });
@@ -180,7 +191,7 @@ namespace Padova.World
         static float[] BellShot()
         {
             float[] ratio = { .5f, 1, 1.19f, 1.5f, 2, 2.51f, 2.66f, 3.01f, 4.1f }, level = { .25f, 1, .6f, .35f, .8f, .3f, .25f, .2f, .15f };
-            var strike = Band(Noise(5, 31), 1500, 6000);
+            var strike = Band(Noise(5, 31), 1500, 6000, 1);
             return Shot(5, (t, i) =>
             {
                 float v = strike[i] * 2 * Mathf.Exp(-t * 60);
