@@ -112,7 +112,10 @@ namespace Padova.City
                 ShellWalls(build.Shell, unit, style);
                 UnitCollider(build, unit, style);
             }
-            foreach (var tree in data.Trees) Tree(build, tree, terrain);
+            // A surveyed row and a scattered garden can put two trees on the same spot: keep the first.
+            var planted = new HashSet<long>();
+            foreach (var tree in data.Trees)
+                if (planted.Add(((long)Mathf.RoundToInt(tree.X / 1.6f) << 32) ^ (uint)Mathf.RoundToInt(tree.Z / 1.6f))) Tree(build, tree, terrain);
             foreach (var wall in data.Walls) GardenWall(build, wall, terrain);
             return build;
         }
@@ -215,7 +218,7 @@ namespace Padova.City
             float x0 = build.Data.Tx * input.Tile, z0 = build.Data.Tz * input.Tile, x1 = x0 + input.Tile, z1 = z0 + input.Tile;
             bool Mine(float x, float z) => x >= x0 && x < x1 && z >= z0 && z < z1;
             bool Core(float x, float z) => input.Core != null && x > input.Core[0] && x < input.Core[2] && z > input.Core[1] && z < input.Core[3];
-            // Bounding boxes of this tile's solid units: a lamp is never planted inside a building.
+            // Bounding boxes of this tile's units: a lamp is never planted inside a building or under a portico.
             var units = build.Data.Units;
             var boxes = new Vector4[units.Length];
             for (int u = 0; u < units.Length; u++)
@@ -230,7 +233,7 @@ namespace Padova.City
                 for (int u = 0; u < units.Length; u++)
                 {
                     var b = boxes[u];
-                    if (x < b.x || x > b.z || z < b.y || z > b.w || units[u].Suspended) continue;
+                    if (x < b.x || x > b.z || z < b.y || z > b.w) continue;       // porticoes count too: no lamp under an arcade
                     var o = units[u].Outline; int n = units[u].RingSizes[0]; bool inside = false;
                     for (int i = 0, j = n - 1; i < n; j = i++)
                         if ((o[2 * i + 1] > z) != (o[2 * j + 1] > z) && x < (o[2 * j] - o[2 * i]) * (z - o[2 * i + 1]) / (o[2 * j + 1] - o[2 * i + 1]) + o[2 * i]) inside = !inside;
@@ -575,9 +578,11 @@ namespace Padova.City
             {
                 float a0 = k * Mathf.PI * 2 / sides, a1 = (k + 1) * Mathf.PI * 2 / sides;
                 Vector3 d0 = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)), d1 = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1));
-                var n = (d0 + d1).normalized;
-                sink.Quad(s, bottom + d0 * radius, bottom + d1 * radius, bottom + d1 * radius + Vector3.up * height, bottom + d0 * radius + Vector3.up * height, n,
-                    new Vector2(a0 * radius, 0), new Vector2(a1 * radius, 0), new Vector2(a1 * radius, height), new Vector2(a0 * radius, height));
+                // Radial normals: a trunk or a lantern reads as round, not as planks.
+                int i0 = sink.V(bottom + d0 * radius, d0, new Vector2(a0 * radius, 0), s), i1 = sink.V(bottom + d1 * radius, d1, new Vector2(a1 * radius, 0), s);
+                int i2 = sink.V(bottom + d1 * radius + Vector3.up * height, d1, new Vector2(a1 * radius, height), s), i3 = sink.V(bottom + d0 * radius + Vector3.up * height, d0, new Vector2(a0 * radius, height), s);
+                var n = d0 + d1;
+                sink.Tri(i0, i1, i2, n); sink.Tri(i0, i2, i3, n);
             }
         }
 
