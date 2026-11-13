@@ -1,4 +1,11 @@
 {
   "name": "Padova.World",
-  "references": ["Padova.Architecture", "Padova.Gameplay", "Unity.InputSystem", "Unity.Pipeline.Attributes"]
+  "references": [
+    "Padova.Architecture",
+    "Padova.Gameplay",
+    "Unity.InputSystem",
+    "Unity.Pipeline.Attributes",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
+  ]
 }

@@ -50,6 +50,9 @@ namespace Padova.Architecture
         public CityRoads Roads{get;private set;}
         /// <summary>Named places, points of interest and districts from the city data.</summary>
         public CityPlaces Places{get;private set;}
+        CityAddresses addresses;
+        /// <summary>House numbers of the comune, read when first asked for.</summary>
+        public CityAddresses Addresses=>addresses??=CityAddresses.Load(System.IO.Path.Combine(CityPack.DefaultFolder,"addresses.bin"));
         void OnEnable(){if(Plan)Build();}
         void OnDisable(){if(Streamer)Streamer.Close();}
         public void Build()

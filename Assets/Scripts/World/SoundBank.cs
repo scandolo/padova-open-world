@@ -8,7 +8,7 @@ namespace Padova.World
     public static class SoundBank
     {
         public const int Rate = 44100;
-        public static AudioClip Engine, Buzz, Diesel, Skid, Wind, Horn, Meep, Siren, Crash, Thud, Bell, Coin, Chime, Blip, Deny, Hum, Birds, Crickets, Step, Ding;
+        public static AudioClip Engine, Buzz, Diesel, Skid, Wind, Horn, Meep, Siren, Crash, Thud, Bell, Coin, Chime, Blip, Deny, Hum, Birds, Crickets, Step, Ding, Cluck, Fanfare;
         public static bool Ready { get; private set; }
 
         public static void Build()
@@ -49,6 +49,33 @@ namespace Padova.World
                 return Mathf.Sin(6.2832f * 4300 * t) * pulse * .5f + Mathf.Sin(6.2832f * 3900 * t) * (Mathf.Repeat(t + .23f, .8f) < .07f ? .3f : 0);
             }, false), true);
             Step = Clip("Step", Shot(.1f, new Func<float, int, float>(Footfall(new System.Random(5)))), false);
+            // A hen: two short falling squawks with a nasal edge.
+            Cluck = Clip("Cluck", Shot(.34f, (t, i) =>
+            {
+                float v = 0;
+                foreach (float start in new[] { 0f, .17f })
+                {
+                    float s = t - start;
+                    if (s < 0 || s > .13f) continue;
+                    float phase = 6.2832f * (880 * s - 1500 * s * s);
+                    v += (Mathf.Sin(phase) + .5f * Mathf.Sin(2 * phase) + .35f * Mathf.Sin(3 * phase)) * Mathf.Sin(Mathf.PI * s / .13f);
+                }
+                return v;
+            }), false);
+            // Found something: a rising four-note flourish.
+            Fanfare = Clip("Fanfare", Shot(1.3f, (t, i) =>
+            {
+                float v = 0;
+                float[] notes = { 392, 523.25f, 659.25f, 783.99f };
+                for (int n = 0; n < notes.Length; n++)
+                {
+                    float s = t - n * .13f;
+                    if (s <= 0) continue;
+                    float hold = n == notes.Length - 1 ? 2.2f : 7;
+                    for (int k = 1; k <= 4; k++) v += Mathf.Sin(6.2832f * notes[n] * k * s) / (k * k) * Mathf.Exp(-s * hold) * Mathf.Clamp01(s * 60);
+                }
+                return v;
+            }), false);
             Ding = Clip("Ding", Shot(1.2f, (t, i) => (Mathf.Sin(6.2832f * 1568 * t) + .5f * Mathf.Sin(6.2832f * 2349 * t) + .25f * Mathf.Sin(6.2832f * 4186 * t)) * Mathf.Exp(-t * 4.5f)), false);
         }
 

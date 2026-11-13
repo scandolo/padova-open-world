@@ -37,6 +37,14 @@ namespace Padova.World
             sound.Game = game;
             if (Harness.Launched) sound.Volume = 0;
             audio.SetActive(true);
+            var menu = new GameObject("Menu");
+            menu.SetActive(false);
+            menu.transform.SetParent(game.transform, false);
+            var screen = menu.AddComponent<GameMenu>();
+            screen.Game = game; screen.Sound = sound;
+            menu.SetActive(true);
+            var eggs = Add<EasterEggs>("Secrets");
+            eggs.Game = game; eggs.Sound = sound;
         }
     }
 

@@ -115,6 +115,9 @@ def run_case(name):
     if name=='drive':return drive_case()
     if name=='night':return night_case()
     if name=='parked':return parked_case()
+    if name=='menu':return menu_case()
+    if name=='jobs':return jobs_case()
+    if name=='secrets':return secrets_case()
     if name not in ['map','car','flight','crowd','quiet_flight','santo','prato','landmarks']:
         reset();return original(name) # Leave any car or plane first: the walking cases need the character.
     reset()
@@ -222,6 +225,83 @@ def wait(fetch,predicate,timeout=15):
         if predicate(s):return s
         if time.monotonic()>end:raise AssertionError(('Condition timed out',s))
         time.sleep(.1)
+
+def menu_case():
+    # Title and pause menu: the world waits behind them, arrows and Enter drive them, the picture preset changes the streaming distance.
+    menu=lambda *a:v.call('city_menu',*a)
+    reset();start=menu();assert start['ready'] and start['screen']=='' and start['quality']==1 and not start['halted'],start
+    menu('--open','title');shown=wait(menu,lambda m:m['screen']=='title' and m['halted'] and m['timeScale']==0,5)
+    time.sleep(.6);title=v.capture('world/title-native.png')
+    before=state();v.press('DownArrow');picture=wait(menu,lambda m:m['selected']==1)
+    assert delta(before,state())<.05,'The world must wait behind the title'
+    v.press('RightArrow');sharp=wait(menu,lambda m:m['quality']==2);assert sharp['shell']>picture['shell'] and sharp['preset']=='Sharp',sharp
+    v.press('LeftArrow');v.press('LeftArrow');battery=wait(menu,lambda m:m['quality']==0);assert battery['shell']<picture['shell'],battery
+    v.press('RightArrow');wait(menu,lambda m:m['quality']==1)
+    v.press('UpArrow');wait(menu,lambda m:m['selected']==0);v.press('Enter')
+    playing=wait(menu,lambda m:m['screen']=='' and not m['halted'] and m['resumes']==1)
+    v.press('Escape');paused=wait(menu,lambda m:m['screen']=='pause' and m['halted'])
+    for _ in range(3):v.press('DownArrow')
+    wait(menu,lambda m:m['selected']==3);v.press('Enter');controls=wait(menu,lambda m:m['screen']=='controls')
+    time.sleep(.5);sheet=v.capture('world/controls-native.png')
+    v.press('Escape');wait(menu,lambda m:m['screen']=='pause');v.press('Escape');wait(menu,lambda m:m['screen']=='' and not m['halted'])
+    before=state();v.down('UpArrow')
+    try:time.sleep(.8)
+    finally:v.up('UpArrow')
+    assert delta(before,state())>.4,'Walking must work again after the menu'
+    return {'presets':[battery['preset'],picture['preset'],sharp['preset']],'shellRadius':[battery['shell'],picture['shell'],sharp['shell']],'screenshot':title,'controlsScreenshot':sheet}
+
+def jobs_case():
+    # Deliveries go from a real kitchen to three real house numbers; a landmark sprint starts from where the car stands.
+    reset();v.call('activity_fixture','--name','save')
+    try:
+        start=enter_car();choose('Digit3');collect=until(lambda s:s['activity']=='delivery' and s['phase']=='collect')
+        def arrive():
+            t=state()['target'];moved=v.call('city_drive','--x',t[0],'--z',t[2]);assert moved['success'],moved
+        arrive();first=until(lambda s:s['phase']=='deliver',12);assert first['money']==start['money'] and first['fare']>=5,first
+        time.sleep(.5);screenshot=v.capture('world/delivery-native.png')
+        paid=first['money'];drops=[]
+        for n in range(3):
+            arrive();done=until(lambda s:s['money']>paid,12);drops.append(done['money']-paid);paid=done['money']
+        until(lambda s:s['activity']=='',8)
+        assert state()['savedMoney']==paid,'Delivery pay must be saved'
+        choose('Digit4');tour=until(lambda s:s['activity']=='race' and s['phase'] in('countdown','racing'));assert tour['checkpoints']>=4 and tour['routeLength']>900,tour
+        until(lambda s:s['phase']=='racing',8);choose('Digit0');until(lambda s:s['activity']=='')
+        time.sleep(.3);assert state()['money']==paid,'Abandoning a sprint must not pay'
+        return {'dropsEuros':drops,'tourCheckpoints':tour['checkpoints'],'tourMetres':tour['routeLength'],'screenshot':screenshot,'fixture':'The car is placed at each stop; collection, addresses, timing and pay are game logic.'}
+    finally:v.call('activity_fixture','--name','restore')
+
+def secrets_case():
+    # A hen is caught by running it down on foot, a spritz is bought at a real bar, the three "senza" pay out, and the old code still works.
+    eggs=lambda *a:v.call('city_eggs',*a)
+    reset();v.call('activity_fixture','--name','save')
+    try:
+        start=eggs();assert start['ready'] and start['hens']>=20 and start['caught']==0,start
+        near=eggs('--hen',1);assert 0<near['henDistance']<9,near
+        time.sleep(.8);hen_shot=v.capture('world/hen-native.png')
+        # Sprint at it in short bursts, re-aiming between them: a held key keeps its first direction.
+        v.down('LeftShift');end=time.monotonic()+40
+        try:
+            while True:
+                caught=eggs('--aim',1)
+                if caught['caught']==1:break
+                if time.monotonic()>end:raise AssertionError(('The hen got away',caught))
+                v.down('UpArrow')
+                try:time.sleep(.45)
+                finally:v.up('UpArrow')
+        finally:v.up('LeftShift')
+        assert caught['money']>=start['money']+25,caught
+        bar=wait(lambda:eggs('--counter','bar'),lambda e:e['counter'] in('bar','pub'),10)
+        time.sleep(.5);v.press('B');drink=wait(eggs,lambda e:e['drinks']==1 and e['tipsy']>.8,5);assert drink['money']==caught['money']-4,drink
+        time.sleep(.4);bar_shot=v.capture('world/spritz-native.png')
+        cafe=wait(lambda:eggs('--counter','cafe'),lambda e:e['counter']=='cafe',10)
+        v.press('B');fast=wait(eggs,lambda e:e['drinks']==2 and e['runSpeed']>cafe['runSpeed']*1.2,5)
+        for place in ['Pedrocchi',"Sant'Antonio",'Prato della Valle']:
+            eggs('--visit',place);time.sleep(1.5)      # one may already be discovered: the chase and the bar are in the centre
+        senza=wait(eggs,lambda e:e['treSenza'],8);assert senza['money']>=fast['money']+100,senza
+        for key in ['UpArrow','UpArrow','DownArrow','DownArrow','LeftArrow','RightArrow','LeftArrow','RightArrow','B','A']:v.press(key);time.sleep(.06)
+        ape=wait(eggs,lambda e:e['flyingApe'],5)
+        return {'hens':start['hens'],'henAt':near['henPlace'],'bar':bar['counterName'],'cafe':cafe['counterName'],'treSenza':True,'flyingApe':True,'screenshot':hen_shot,'barScreenshot':bar_shot}
+    finally:v.call('activity_fixture','--name','restore')
 
 def parked_case():
     # Kerbside vehicles come from the road graph: walk up to one in a residential street, take it with E and drive off.
@@ -358,7 +438,7 @@ def activity_case(name):
 
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,night,parked,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,night,parked,menu,jobs,secrets,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True

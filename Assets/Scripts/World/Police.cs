@@ -164,6 +164,7 @@ namespace Padova.World
         static float Flat(Vector3 a,Vector3 b)=>Vector2.Distance(new Vector2(a.x,a.z),new Vector2(b.x,b.z));
         void OnGUI()
         {
+            if(Game && Game.Menu)return;
             float since=Time.unscaledTime-bannerAt;
             if(!Game || Game.MapOpen || Wanted==0 && since>4)return;
             var old=GUI.matrix;Hud.Begin();

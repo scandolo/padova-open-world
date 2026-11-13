@@ -11,7 +11,9 @@ namespace Padova.World
     public sealed class StreetWalkers : MonoBehaviour
     {
         public OpenWorld Game;
-        public int Count = 26;
+        public int Count = 34;
+        /// <summary>How many of the pool are out at once; the quality preset sets it.</summary>
+        public int Limit = 26;
         [Tooltip("Walkers live inside this distance of the player (m).")] public float Radius = 120;
         /// <summary>Walkers on the street now, metres walked by all of them, and times one stepped out of a car's way.</summary>
         public int Walking, Dodges;
@@ -106,7 +108,7 @@ namespace Padova.World
                 Step(roads, w, dt, car);
             }
             Walking = walking;
-            if (Time.time >= nextSpawn && walking < Count)
+            if (Time.time >= nextSpawn && walking < Mathf.Min(Limit, Count))
             {
                 nextSpawn = Time.time + .15f;
                 foreach (var w in walkers) if (!w.Active) { Spawn(roads, net, w, focus); break; }

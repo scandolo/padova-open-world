@@ -88,6 +88,18 @@ namespace Padova.World
             ui.PlayOneShot(clip, volume);
         }
 
+        /// <summary>Rings the bell at a place a number of times.</summary>
+        public void Toll(Vector3 at, int strokes)
+        {
+            bellAt = at; tollsLeft = Mathf.Max(tollsLeft, strokes); nextToll = 0;
+        }
+
+        /// <summary>A sound at a point in the world.</summary>
+        public void PlayAt(AudioClip clip, Vector3 at, float volume = 1)
+        {
+            if (clip && Volume > 0) AudioSource.PlayClipAtPoint(clip, at, volume);
+        }
+
         static float Ease(float current, float target, float rate, float dt) => Mathf.Lerp(current, target, 1 - Mathf.Exp(-rate * dt));
 
         void Update()
@@ -223,7 +235,7 @@ namespace Padova.World
             {
                 honkAnswer = 0;
                 foreach (var v in nearest)
-                    if (v.Blocked > 1 && v.Go) { AudioSource.PlayClipAtPoint(SoundBank.Horn, v.Go.transform.position, .6f); break; }
+                    if (v.Blocked > 1 && v.Go) { PlayAt(SoundBank.Horn, v.Go.transform.position, .6f); break; }
             }
         }
 

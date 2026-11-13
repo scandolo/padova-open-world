@@ -167,6 +167,63 @@ namespace Padova.City
         }
     }
 
+    /// <summary>House numbers of the comune with their street names (Tools/city/places.py): where a delivery can be sent.</summary>
+    public sealed class CityAddresses
+    {
+        public string[] Streets;
+        public float[] X, Z;
+        public ushort[] Street, Number;
+        public string[] Letters;
+        public int Count => X.Length;
+
+        public static CityAddresses Load(string path)
+        {
+            if (!File.Exists(path)) return null;
+            var b = File.ReadAllBytes(path);
+            if (b.Length < 8 || b[0] != 'P' || b[1] != 'C' || b[2] != 'A' || b[3] != 'D' || BitConverter.ToUInt32(b, 4) != 1) return null;
+            int p = 8;
+            var list = new CityAddresses();
+            int count = (int)BitConverter.ToUInt32(b, p); p += 4;
+            list.Streets = new string[count];
+            for (int i = 0; i < count; i++)
+            {
+                int n = BitConverter.ToUInt16(b, p); p += 2;
+                list.Streets[i] = Encoding.UTF8.GetString(b, p, n); p += n;
+            }
+            count = (int)BitConverter.ToUInt32(b, p); p += 4;
+            list.X = new float[count]; list.Z = new float[count]; list.Street = new ushort[count]; list.Number = new ushort[count]; list.Letters = new string[count];
+            for (int i = 0; i < count; i++)
+            {
+                list.X[i] = BitConverter.ToSingle(b, p); list.Z[i] = BitConverter.ToSingle(b, p + 4);
+                list.Street[i] = BitConverter.ToUInt16(b, p + 8); list.Number[i] = BitConverter.ToUInt16(b, p + 10);
+                int n = b[p + 12];
+                list.Letters[i] = n == 0 ? "" : Encoding.ASCII.GetString(b, p + 13, n);
+                p += 13 + n;
+            }
+            return list;
+        }
+
+        /// <summary>"Via Tiziano Aspetti 42": the street in ordinary capitals, then the number.</summary>
+        public string Label(int index)
+        {
+            var words = Streets[Street[index]].ToLowerInvariant().Split(' ');
+            for (int i = 0; i < words.Length; i++) if (words[i].Length > 0) words[i] = char.ToUpperInvariant(words[i][0]) + words[i].Substring(1);
+            return string.Join(" ", words) + " " + Number[index] + Letters[index];
+        }
+
+        /// <summary>A house number between <paramref name="near"/> and <paramref name="far"/> metres from a point, or -1.</summary>
+        public int Pick(float x, float z, float near, float far, System.Random random)
+        {
+            for (int tries = 0; tries < 4000; tries++)
+            {
+                int i = random.Next(Count);
+                float dx = X[i] - x, dz = Z[i] - z, d = dx * dx + dz * dz;
+                if (d >= near * near && d <= far * far && Number[i] > 0) return i;
+            }
+            return -1;
+        }
+    }
+
     [Serializable] public sealed class CityPlace { public string name, kind, source; public float x, z; public int rank; }
     [Serializable] public sealed class CityDistrict { public string name; public float x, z; }
 

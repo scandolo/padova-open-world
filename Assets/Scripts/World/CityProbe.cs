@@ -44,6 +44,72 @@ namespace Padova.World
             };
         }
 
+        [CliCommand("city_menu", "The title and pause menu: which screen is up, the selection and the picture preset; --open shows a screen, --quality sets the preset.")]
+        public static object Menu([CliArg("open", "title | pause | controls | none")] string open = "", [CliArg("quality", "0 Battery, 1 Balanced, 2 Sharp")] int quality = -1)
+        {
+            var menu = Object.FindFirstObjectByType<GameMenu>();
+            if (!menu) return new { ready = false };
+            if (open == "none") menu.Close(); else if (open != "") menu.Open(open);
+            if (quality >= 0) Quality.Apply(menu.Game, quality, false);
+            var streamer = menu.Game.City.Streamer;
+            return new
+            {
+                ready = true, screen = menu.Screen, selected = menu.Selected, resumes = menu.Resumes, halted = menu.Game.Halted, timeScale = Time.timeScale,
+                quality = Quality.Level, preset = Quality.Names[Quality.Level], shell = streamer ? streamer.ShellRadius : 0, detail = streamer ? streamer.DetailRadius : 0,
+                shadows = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset p ? p.shadowDistance : 0
+            };
+        }
+
+        [CliCommand("city_eggs", "Secrets: hens caught, the counter within reach, drinks, and which secrets are found. --hen 1 walks the player to the nearest hen, --counter bar|cafe|gelateria to the nearest one, --visit a place name.")]
+        public static object Eggs([CliArg("hen", "1 puts the walking player three metres from the nearest uncaught hen")] int hen = 0,
+            [CliArg("counter", "bar | cafe | gelateria: stand at the nearest one")] string counter = "", [CliArg("visit", "Stand at the place whose name contains this")] string visit = "",
+            [CliArg("aim", "1 turns the camera towards the nearest hen, so forward runs at it")] int aim = 0)
+        {
+            var game = Object.FindFirstObjectByType<OpenWorld>();
+            var eggs = Object.FindFirstObjectByType<EasterEggs>();
+            if (!game || !eggs) return new { ready = false };
+            void Stand(Vector3 p)
+            {
+                game.City.Streamer.Prepare(p);
+                Physics.SyncTransforms();
+                p.y = game.SurfaceAt(p) + .1f;
+                var controller = game.Player.GetComponent<CharacterController>();
+                controller.enabled = false; game.Player.transform.position = p; controller.enabled = true;
+                game.Player.VerticalSpeed = -1; game.Player.FollowCamera.ResetCamera();
+            }
+            var nearest = eggs.NearestHen(game.Position, out string place);
+            if (hen > 0 && game.Mode == "walk" && nearest.y > -9000) Stand(nearest + new Vector3(3, 0, 0));
+            if (counter != "" && game.Mode == "walk" && game.City.Places != null)
+            {
+                Padova.City.CityPlace best = null;
+                float bestD = float.MaxValue;
+                foreach (var poi in game.City.Places.pois)
+                {
+                    if (poi.kind != counter) continue;
+                    float d = (poi.x - game.Position.x) * (poi.x - game.Position.x) + (poi.z - game.Position.z) * (poi.z - game.Position.z);
+                    if (d < bestD) { bestD = d; best = poi; }
+                }
+                if (best != null) Stand(new Vector3(best.x + 1.5f, 0, best.z));
+            }
+            if (visit != "" && game.Mode == "walk")
+                foreach (var mark in game.City.Data.landmarks)
+                    if (mark.name != null && mark.name.Contains(visit)) { Stand(new Vector3(mark.x + 2, 0, mark.z)); break; }
+            nearest = eggs.NearestHen(game.Position, out place);
+            if (aim > 0 && nearest.y > -9000)
+            {
+                var to = nearest - game.Position;
+                game.Player.FollowCamera.SetTestHeading(Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg);
+            }
+            return new
+            {
+                ready = true, caught = eggs.Caught, hens = eggs.Total, henPlace = place, henDistance = nearest.y > -9000 ? Vector3.Distance(nearest, game.Position) : -1,
+                hen = nearest.y > -9000 ? new[] { nearest.x, nearest.y, nearest.z } : new float[0],
+                counter = eggs.Counter != null ? eggs.Counter.kind : "", counterName = eggs.Counter != null ? eggs.Counter.name : "", drinks = eggs.Drinks, tipsy = eggs.Tipsy,
+                treSenza = eggs.TreSenza, galileo = eggs.Galileo, flyingApe = eggs.FlyingApe, cheers = eggs.Cheers,
+                money = game.Activities ? game.Activities.Money : 0, runSpeed = game.Player.RunSpeed, jumpHeight = game.Player.JumpHeight, discoveries = game.Discoveries
+            };
+        }
+
         [CliCommand("city_parked", "Kerbside vehicles: how many stand around the player, were taken, knocked loose or blocked; --near 1 walks the player beside the nearest.")]
         public static object Parked([CliArg("near", "1 puts the walking player next to the nearest parked vehicle")] int near = 0)
         {

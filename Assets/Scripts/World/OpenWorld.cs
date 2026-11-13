@@ -20,7 +20,7 @@ namespace Padova.World
         public CityCar Driving{get;private set;}public CityCar Nearby{get;private set;}
         public bool HasWaypoint;public Vector3 Waypoint;public string DestinationName="";
         public float MapSpan=800;public Vector2 MapCentre;public int Discoveries;
-        public bool[] Visited;public string Notice="Welcome to Padova  ·  E to take a car  ·  J for activities";
+        public bool[] Visited;public string Notice="Welcome to Padova  ·  E to take a car  ·  J for jobs";
         Vector3 returnPoint;float returnYaw;float noticeUntil=18,nextLocation,locationSince=-10;Vector2 dragStart;bool dragging;
         public Material MinimapMaterial;public bool ShowHelp=true;bool helpSeen;public string Location="";
         InputAction mapAction,interactAction,flightAction,resetAction,escapeAction,clickAction,helpAction;
@@ -61,13 +61,15 @@ namespace Padova.World
             var specs=new[]{VehicleCatalog.Berlina,VehicleCatalog.Utilitaria,VehicleCatalog.Utilitaria};var paints=new[]{new Color(.1f,.27f,.5f),new Color(.76f,.14f,.1f),new Color(.93f,.9f,.8f)};
             for(int i=0;i<Cars.Length&&i<specs.Length;i++)if(Cars[i])Cars[i]=VehicleFactory.Replace(Cars[i],specs[i],paints[i]);
             var hud=Player.GetComponent<WalkHud>();if(!hud)hud=FindFirstObjectByType<WalkHud>();if(hud){if(hud.GoalMarker)hud.GoalMarker.gameObject.SetActive(false);hud.enabled=false;}
-            Notice="Welcome to Padova  ·  E to take a car  ·  J for activities";            Visited=new bool[City.Data.landmarks.Length];MapCentre=new Vector2(Player.transform.position.x,Player.transform.position.z);
+            Notice="Welcome to Padova  ·  E to take a car  ·  J for jobs";            Visited=new bool[City.Data.landmarks.Length];MapCentre=new Vector2(Player.transform.position.x,Player.transform.position.z);
         }
         void Update()
         {
             var k=Keyboard.current;if(k==null)return;
             bool interact=interactRequested,flight=flightRequested,reset=resetRequested,escape=escapeRequested,down=clickDown,up=clickUp;
             interactRequested=flightRequested=resetRequested=escapeRequested=clickDown=clickUp=false;
+            // A menu is up: the world waits and every key belongs to the menu.
+            if(Menu){mapRequested=false;Time.timeScale=0;return;}
             if(ShowHelp && !helpSeen && Time.time>15){ShowHelp=false;helpSeen=true;}
             if(mapRequested){mapRequested=false;SetMap(!MapOpen);}
             // One place owns the clock: stopped while a modal screen is up, a beat of slow motion after a hard crash.
@@ -265,7 +267,7 @@ namespace Padova.World
         }
         void OnGUI()
         {
-            if(!Player || City.Data==null)return;var old=GUI.matrix;Hud.Begin();
+            if(!Player || City.Data==null || Menu)return;var old=GUI.matrix;Hud.Begin();
             if(MapOpen){DrawMap();GUI.matrix=old;return;}
             UpdateLocation();Minimap();
             float sinceDistrict=Time.unscaledTime-districtSince;
@@ -277,7 +279,7 @@ namespace Padova.World
             }
             Hud.Text(new Rect(292,868,420,30),Location,24,Color.white,TextAnchor.UpperLeft,true);
             Hud.Text(new Rect(292,898,420,24),Discoveries+" / "+Visited.Length+" places discovered",17,Hud.Muted);
-            Hud.Text(new Rect(292,922,420,24),"<b>M</b> map   ·   <b>J</b> activities   ·   <b>H</b> controls",17,Hud.Muted);
+            Hud.Text(new Rect(292,922,420,24),"<b>M</b> map   ·   <b>J</b> jobs   ·   <b>H</b> keys   ·   <b>Esc</b> menu",17,Hud.Muted);
             // Area name appears big when you enter a new street or piazza, then fades.
             float since=Time.unscaledTime-locationSince;
             if(since<4.5f){float a=Mathf.Clamp01(since*3)*Mathf.Clamp01((4.5f-since)*1.5f);Hud.Text(new Rect(700,Mode=="drive"?700:840,860,80),Location.ToUpperInvariant(),58,new Color(Hud.Cream.r,Hud.Cream.g,Hud.Cream.b,a),TextAnchor.LowerRight,false,true);}
@@ -314,15 +316,15 @@ namespace Padova.World
             if(Nearby && Mode=="walk")Hud.Prompt(new Vector2(800,790),"E","Drive the "+Nearby.name);
             else if(NearbyParked && Mode=="walk")Hud.Prompt(new Vector2(800,790),"E","Take the "+NearbyParked.Spec.Label);
             else if(NearbyTraffic!=null)Hud.Prompt(new Vector2(800,790),"E","Steal the "+NearbyTraffic.Colour);
-            if(ShowHelp)Help();
+            if(ShowHelp && !(Activities && Activities.Active))Help();
             Hud.Text(new Rect(34,978,1300,20),"Comune di Padova / Regione Veneto · IODL 2.0   ·   Names © OpenStreetMap · ODbL   ·   Poly Haven / Kenney · CC0   ·   Façades and street life are authored typology",12,new Color(1,1,1,.5f));
             GUI.matrix=old;
         }
         void Help()
         {
-            string[][] rows=Mode=="drive"?new[]{new[]{"W A S D / ↑ ← ↓ →","Drive and steer"},new[]{"SHIFT","Turbo"},new[]{"SPACE","Handbrake"},new[]{"E","Get out"},new[]{"Q","Horn"},new[]{"R","Reset car"},new[]{"C","Camera view"},new[]{"T","Time of day"},new[]{"M","Map"},new[]{"J","Activities"}}
+            string[][] rows=Mode=="drive"?new[]{new[]{"W A S D / ↑ ← ↓ →","Drive and steer"},new[]{"SHIFT","Turbo"},new[]{"SPACE","Handbrake"},new[]{"E","Get out"},new[]{"Q","Horn"},new[]{"R","Reset car"},new[]{"C","Camera view"},new[]{"T","Time of day"},new[]{"M","Map"},new[]{"J","Jobs"}}
                 :Mode=="fly"?new[]{new[]{"↑ ↓","Climb / descend"},new[]{"← →","Bank"},new[]{"SHIFT / SPACE","Faster / slower"},new[]{"F","Land and walk"},new[]{"M","Map"}}
-                :new[]{new[]{"W A S D / ↑ ← ↓ →","Walk"},new[]{"SHIFT","Sprint"},new[]{"SPACE","Jump"},new[]{"E","Drive / steal a car"},new[]{"F","Sightseeing flight"},new[]{"MOUSE DRAG","Look around"},new[]{"C","Camera view"},new[]{"T","Time of day"},new[]{"M","Map"},new[]{"J","Activities"}};
+                :new[]{new[]{"W A S D / ↑ ← ↓ →","Walk"},new[]{"SHIFT","Sprint"},new[]{"SPACE","Jump"},new[]{"E","Drive / steal a car"},new[]{"F","Sightseeing flight"},new[]{"MOUSE DRAG","Look around"},new[]{"C","Camera view"},new[]{"T","Time of day"},new[]{"M","Map"},new[]{"J","Jobs"}};
             float h=78+rows.Length*36;var r=new Rect(1180,150,390,h);Hud.Panel(r,Hud.Ink);
             Hud.Text(new Rect(r.x+24,r.y+16,340,40),"CONTROLS",34,Hud.Gold,TextAnchor.UpperLeft,false,true);Hud.Text(new Rect(r.x+24,r.y+20,342,30),"H to hide",15,Hud.Muted,TextAnchor.UpperRight);
             for(int i=0;i<rows.Length;i++){float y=r.y+66+i*36;Hud.Text(new Rect(r.x+24,y,170,30),rows[i][0],17,Hud.Cream,TextAnchor.MiddleLeft,true);Hud.Text(new Rect(r.x+196,y,180,30),rows[i][1],18,Color.white,TextAnchor.MiddleLeft);}

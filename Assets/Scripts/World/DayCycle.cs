@@ -45,7 +45,7 @@ namespace Padova.World
                 exposure = sky.HasProperty(Exposure) ? sky.GetFloat(Exposure) : 1;
             }
             skip = new InputAction("Skip time", InputActionType.Button, "<Keyboard>/t");
-            skip.performed += _ => SkipAhead();
+            skip.performed += _ => { if (!OpenWorld.Current || !OpenWorld.Current.Halted) SkipAhead(); };
             skip.Enable();
             Apply();
         }
