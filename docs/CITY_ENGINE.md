@@ -5,7 +5,7 @@ Every building, street, canal, garden wall and tree outside the hand-modelled co
 ```text
 DBT 2007 shapefiles ─┐
 OSM tags (names/uses)┼─> Tools/city/compile_city.py ─> Assets/StreamingAssets/City/*.bin ─> CityStreamer ─> meshes
-Data/City/zones.json ─┘        (offline, ~6 min)             (256 m tiles, 67 MB)            (worker threads)
+Data/City/zones.json ─┘        (offline, ~2 min)             (256 m tiles, 67 MB)            (worker threads)
 ```
 
 ## What is evidence and what is typology
@@ -19,6 +19,11 @@ Data/City/zones.json ─┘        (offline, ~6 min)             (256 m tiles, 6
 | Garden and boundary walls with their heights | DBT `EL_DIV` | Survey line and height; material is typology |
 | Tree rows | DBT `FIL_AL` | Surveyed line; spacing along it is typology |
 | Trees inside gardens, tree areas and woods | scatter inside the surveyed polygon | Typology |
+| Road centrelines, junctions and carriageway widths | DBT `EL_STR`, `GZ_STR`, measured against `AC_VEI` (`Tools/city/roads.py`) | Survey |
+| One-way streets, speed limits, signals, road class | OpenStreetMap tags joined to the surveyed edges | Crowd-sourced (ODbL) |
+| Lane markings, zebra crossings, street lamps and their spacing | generated per tile from the road graph | Typology on surveyed lines |
+| Kerbside parking bays, the vehicles in them, lane positions beside them | `CityRoads.Parking` from the measured width | Typology |
+| Named places, points of interest, districts, house numbers | OpenStreetMap and DBT `N_CIV` (`Tools/city/places.py`) | Crowd-sourced / survey |
 | Terrain | 64 m grid of the median surveyed base elevation, blended into the core's fitted plane | Interpolation, not a scan |
 | Building class (townhouse, palazzo, condo, house, shed, church, tower, civic…) | rules over `EDIFC`, OSM tags, height and the hand-drawn historic-centre zone | Typology key |
 | Roof form and pitch, gable or hip ends, flat roofs, domes over round church volumes, spires on bell towers | rules per class over the surveyed outline | Typology |
@@ -31,13 +36,17 @@ The compiler never moves a surveyed vertex or height. Hero assets keep priority:
 ```sh
 python3 -m venv .context/city/venv && .context/city/venv/bin/pip install -r requirements.txt
 python3 Tools/city/fetch_osm.py points areas buildings      # optional: names and uses
-.context/city/venv/bin/python Tools/city/compile_city.py --jobs 6            # whole comune, about 6 minutes
+.context/city/venv/bin/python Tools/city/compile_city.py --jobs 6            # whole comune, about 2 minutes
+.context/city/venv/bin/python Tools/city/roads.py                            # drivable graph -> roads.bin
+.context/city/venv/bin/python Tools/city/places.py                           # places, districts, addresses
+.context/city/venv/bin/python Tools/city/overview_map.py                     # the two map sheets
+.context/city/venv/bin/python -m unittest Tools/city/test_city.py            # 23 checks on the outputs
 .context/city/venv/bin/python Tools/city/compile_city.py --radius 700        # quick test area
 ```
 
 Inputs are the municipal archives (`.context/geodata/padova-dbt` areas, `.context/city/dbt` lines and points; see [REAL_WORLD_DATA.md](REAL_WORLD_DATA.md) for the download) and the CGAL roof helper in `.context/bin`. The game itself needs none of this: the packs are versioned.
 
-Class rules, roof rules and ground priorities are the tables at the top of `compile_city.py` (`OSM_CLASS`, `classify`, `refine_units`, `SLOPE`, `GABLE_SHARE`, `GROUND_LAYERS`, `LEVEL`). Change a rule, recompile, and the whole city follows.
+Class rules, roof rules and ground priorities are the tables at the top of `compile_city.py` (`OSM_CLASS`, `classify`, `refine_units`, `BIG_BOX`, `SLOPE`, `RISE_CAP`, `GABLE_SHARE`, `GROUND_LAYERS`, `LEVEL`). Change a rule, recompile, and the whole city follows.
 
 ## Pack format (version 1, little-endian)
 
@@ -60,6 +69,11 @@ A tile is `"PCT1"`, int16 tx, int16 tz, then four sections:
 - **Modelled façades, near tiles**: within `DetailRadius` the walls are rebuilt by the same `FacadeBuilder` as the core district, styled by `CityStyle.For(seed, class)`. The window grid of the distant version uses the same bays and storeys, so the swap does not move openings.
 - **Colliders** exist within `ColliderRadius`; meshes are cooked on a worker thread.
 - Tile parsing and meshing run on worker threads (`TileMesher` is pure functions over tile data); the main thread applies at most two finished jobs per frame.
+- **Streets**: with the road graph (`CityStreamer.SetRoads`) each tile also gets centre dashes, edge lines, zebra crossings, parking bays and street lamps. Lamps carry a pool of light in a fourth mesh, drawn with the additive `Padova/CityGlow` material only after dark.
+- **Night**: `DayCycle` publishes the global `_PadovaNight` (0 day, 1 night). The city shader lights a share of its procedural windows and the lamp glass; modelled windows use `Padova/Glass`, where each pane carries a random number in its UV so whole panes light up.
+- **Far ground**: beyond the streamed tiles the overview map lies flat under the terrain (`FarGround`), so from the air the city runs to the horizon.
+
+The same graph drives gameplay: `RoadNetwork.Build(CityRoads)` makes the lanes traffic, police and routes use (moved over where a street has parking bays), `ParkedCars` fills the bays, `StreetWalkers` walks the pavements beside the carriageways.
 
 `WorldContext.Data` remains the gameplay view: `GroundAt`, road centrelines and named places. In the Editor, `WorldContext.RefreshVisibility(eye)` loads synchronously around a viewpoint (used by tests and `AgentScripts/Shoot.cs`).
 
@@ -69,3 +83,4 @@ A tile is `"PCT1"`, int16 tx, int16 tz, then four sections:
 - Roads are flat on the terrain: flyovers and underpasses are not raised or sunk, and bridges are decks at street level over the sunken water.
 - The core district and the Blender landmarks keep their own, older pipelines.
 - The packs are about 67 MB; every recompile rewrites all region files.
+- Lamps, markings, bays and crossings follow rules, not a survey of street furniture; a large junction can come out bare.

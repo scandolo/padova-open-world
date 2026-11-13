@@ -1,43 +1,47 @@
 # Padova exploration prototype
 
-Open `Assets/Scenes/PadovaPlayable.unity` and press Play, or launch `.context/build/PadovaPlayable.app` after building. The game starts on foot in Piazza della Frutta.
+Open `Assets/Scenes/PadovaPlayable.unity` and press Play, or launch `.context/build/PadovaPlayable.app` after building. The game starts on foot in Piazza della Frutta, behind a title screen.
 
 ## Controls
 
-| Input | On foot | Driving | Sightseeing flight |
+| Key | On foot | At the wheel | Sightseeing flight |
 | --- | --- | --- | --- |
-| WASD or arrow keys | Camera-relative movement | Accelerate / brake-then-reverse / steer | Climb / descend / bank |
-| Shift | Sprint | Turbo (meter drains in ~3 s, refills in ~8 s) | Faster flight |
-| Space | Jump | Handbrake (rear wheels, lets the car slide) | Air brake |
-| E (or Return) | Enter a parked car, or steal a traffic car | Get out (below ~15 km/h) | — |
-| J, then 1 / 2 / 0 | Activities: taxi / sprint / quit (car required) | same | — |
-| M | Open / close map | same | same |
-| F | Start airborne tour (not while wanted) | Start tour after stopping | Return to previous walking position |
-| R | Return to market | Reset car to its parking position | End flight |
-| Mouse drag / scroll | Look around / zoom | same | — |
-| C | Cycle camera: chase, close, high | same | — |
-| H | Show / hide controls | same | same |
-| Tab | Toggle running | — | — |
+| W A S D / arrows | Camera-relative movement | Accelerate / brake-then-reverse / steer | Climb / descend / bank |
+| Shift | Sprint | Turbo (drains in ~3 s, refills in ~8 s) | Faster |
+| Space | Jump | Handbrake (lets the tail slide) | Air brake |
+| E (or Return) | Take a parked vehicle, or steal one from traffic | Get out (below ~15 km/h) | — |
+| Q | — | Horn | — |
+| B | Order at a bar, café or gelateria within reach | — | — |
+| J, then 1–4 / 0 | Jobs: taxi / classic sprint / deliveries / sprint to a landmark / quit | same | — |
+| M | Open / close the map | same | same |
+| T | Skip to the next part of the day | same | same |
+| F | Start the airborne tour (not while wanted) | Start the tour after stopping | Return to the walk |
+| R | — | Put the car back on the nearest lane | End flight |
+| Mouse drag / scroll, C | Look around / zoom, camera view | same | — |
+| H / Esc | Key hints / pause menu | same | same |
 
-The camera follows the original browser prototype: it swings in behind the direction of travel, holds a manual mouse look for about a second, and sweeps its boom against architecture. While a movement key combination stays held, the walking direction keeps the basis it started with, so the following camera cannot turn the walker in circles. Driving widens the field of view with speed and turbo.
+The game opens on a title screen (Enter plays). Esc pauses: resume, picture preset (Battery, Balanced, Sharp), volume, the controls on one page, back to the market, quit. The world stands still behind any menu and behind the map.
 
-The HUD shows a rotating circular minimap (survey map texture, `Assets/Shaders/Minimap.shader`) with waypoint, police, cars, places and route; the street or place you are in; wallet and wanted stars; a large speedometer with the turbo meter; contextual key prompts; and banners for fares, medals, arrests and escapes. Text uses the macOS system font Avenir Next Condensed at runtime, so no font file ships.
+The HUD shows a rotating minimap, the street or place and the district you are in, wallet, clock and wanted stars, a speedometer with the turbo meter, contextual key prompts, and banners for fares, deliveries, medals, arrests, escapes and secrets.
 
-The map pauses simulation. Drag to pan, scroll to zoom, click to set a waypoint, and press M or Esc to close it. Blue dots mark drivable cars and red dots police. The distance label is straight-line distance; active activities also draw road-route dots. Ten places can be discovered by exploring near them.
+## What there is to do
 
-Three compact cars are available on Via Dante, Corso Milano and Via Roma. They use Rigidbody/WheelCollider suspension, steering, braking and architecture collision. Up to 34 autonomous cars follow lanes derived from surveyed road centrelines. Lanes whose car envelope would intersect architecture (portico supports, narrow historic streets; 51 of 1,304 directed lanes) are closed to traffic and preferred-against by activity routing. Lane direction and width are gameplay assumptions, not surveyed traffic rules.
+- **Any vehicle**: kerbside bays across the city hold parked cars, vans, scooters, Apes and bicycles; walk up and press E. Now and then one has an alarm. Ram one and it is knocked loose.
+- **Taxi** (J, 1): pick up along the kerb, drop at a named place; pay by distance, a tip for speed, deductions per bump.
+- **Deliveries** (J, 3): collect at the nearest real pizzeria or restaurant, deliver to three real house numbers against the clock.
+- **Sprints** (J, 2 and 4): Corso Garibaldi to Prato della Valle with a saved best time, or from wherever you are to a landmark one to three kilometres away. Gold, silver, bronze.
+- **Police**: stealing from traffic or a hit-and-run raises up to three stars; patrols come by road, ram and arrest. Lose them for 15 s to escape.
+- **Day and night**: about 48 minutes a day, the dark hours passing faster; T skips ahead. After dark windows light up, lamps throw pools of light and headlights come on.
+- **Exploring**: 255 places to discover, 41 districts announced as you enter them, the map with waypoints and the sightseeing plane.
+- **Secrets**: 24 crested Padovana hens clucking in parks and squares, to be caught on foot (€25 each, and a golden one); a spritz, an espresso or a gelato at the real bars, cafés and gelaterie (each does something); the three "senza"; Galileo's tower after dark; the graduates at the Bo and the bells of the Santo for whoever sounds the horn there; and a cheat code from the 1980s.
 
-J opens activities. Taxi fares require stopping at the passenger and destination, with distance-based pay, a speed bonus and collision deductions. The Garibaldi–Prato sprint has a countdown, ordered checkpoints and a medal reward. Money and the best race time persist locally.
-
-Stealing a traffic car or a hard hit-and-run raises a wanted level of up to three stars. Physics-driven patrol cars appear out of view, follow the road network to you, ram, and arrest you if you stay slow or stopped beside them for 2.5 s (fine of €40 per star, you are put on foot). Staying more than 110 m from every patrol for 15 s loses them.
-
-F starts the aircraft already airborne. Flight assistance keeps it above the skyline and turns it back near the map boundary. There is no airport, takeoff, landing or flight-simulator physics. Ending flight restores the previous walking position.
+Money, the best sprint time, caught hens and found secrets are saved locally.
 
 ## City and evidence
 
-The detailed core retains Claude's modelled Palazzo della Ragione, façades, textured surfaces, porticoes and roofs. Additional landmark geometry covers the clock tower, Capitanio frontage, Duomo/baptistery and the Ancient Courtyard of Palazzo del Bo. These are reference-informed models with simplified ornament, not scanned reconstructions.
+The detailed core retains the modelled Palazzo della Ragione, façades, porticoes and roofs, with landmark geometry for the clock tower, Capitanio frontage, Duomo, baptistery and the Bo. These are reference-informed models with simplified ornament, not scans.
 
-A 3 × 2.6 km envelope adds 19,355 municipal **volume units**, source road/green/water polygons and lower-detail roof geometry. Buildings can contain several volume units. The map uses the same survey outlines. Sixty-four animated pedestrians navigate a baked central NavMesh; twelve market stalls, eleven lamps, six benches and trees populate the scene. Individual trees and street objects are authored placements.
+Everything else is the [city engine](CITY_ENGINE.md): 100,134 municipal volume units over the whole comune with class-specific façades and roofs, the surveyed ground (carriageways, sidewalks, cycle paths, squares, water, gardens), boundary walls and tree rows, streamed in 256 m tiles. Lane markings, crossings, lamps, parking bays, parked vehicles, traffic and the people on the pavements are generated from the surveyed road graph. Sixty-four pedestrians on a baked NavMesh and twelve market stalls remain in the core.
 
 See [architecture and fidelity](ARCHITECTURE.md), [survey provenance](REAL_WORLD_DATA.md), and [landmark references and expansion limits](../Data/World/landmarks.md). DBT records date from 2007. Ordinary façades and roofs are typology; material textures are reusable surfaces, not site scans. Interiors and the whole city are not finished.
 

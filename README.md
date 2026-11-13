@@ -4,13 +4,17 @@ A native macOS open-world game built with **Unity 6.3 LTS and the Universal Rend
 
 The city uses public municipal geography: real street plans, building outlines, courtyards, recorded elevations and portico clearances. Architectural detail is modelled in 3D. **Ordinary façades and roofs use documented local typology; they are not measured elevations or scans of every building.** Photographs are not projected onto façades.
 
-## Current prototype
+## What is in the game
 
-- **The whole comune of Padova, generated from data**: 100,134 surveyed building volumes, every carriageway, sidewalk, cycle path, canal, garden wall and tree row, streamed around the player in 256 m tiles. Nothing outside the historic core is modelled by hand. See [the city engine](docs/CITY_ENGINE.md).
-- A hand-detailed historic core around Palazzo della Ragione and the Erbe, Frutta and Signori piazzas, plus Blender landmarks (the Santo, Prato della Valle, Santa Giustina and others).
-- A drivable road graph of the whole city (999 km of streets with one-way rules, speed classes and signals), 550 named places, 41 districts and a two-sheet city map.
-- Ten vehicle types (utilitaria, berlina, van, taxi, police pantera, scooter, Ape, bus, tram, bicycle) with arcade physics; traffic, police pursuits with wanted stars, taxi fares and a checkpoint sprint.
-- An animated third-person character, pedestrians in the centre, an interactive map with waypoints, discoverable places and an assisted sightseeing plane.
+- **The whole comune of Padova, generated from data**: 100,134 surveyed building volumes, every carriageway, sidewalk, cycle path, canal, garden wall and tree row, streamed around the player in 256 m tiles. Nothing outside the historic core is modelled by hand: see [the city engine](docs/CITY_ENGINE.md).
+- A hand-detailed historic core around Palazzo della Ragione, plus Blender landmarks (the Santo, Prato della Valle, Santa Giustina and others).
+- A drivable road graph of the whole city (999 km of streets with one-way rules and speed classes), lane markings, zebra crossings, street lamps and painted kerbside parking bays, all derived from the survey graph.
+- **Ten vehicle types** with arcade physics: utilitaria, berlina, van, taxi, police pantera, scooter, Ape, bus, tram, bicycle. Parked vehicles line the streets and any of them can be taken; traffic and pedestrians fill the whole city.
+- **Day and night**: a moving sun, sunsets, lit windows across the city, lamplight on the streets and headlights. T skips to the next part of the day.
+- **Sound, all synthesised at start-up** (no audio files): an engine with gears per vehicle type, tyres, horn, crashes, passing traffic, sirens, church bells on the hour, birds by day and crickets by night.
+- **Jobs** (J): taxi fares, deliveries from real kitchens to real house numbers, the Garibaldi–Prato sprint and sprints to any landmark. Police pursuits with wanted stars.
+- **Secrets**: 24 crested Padovana hens loose in the parks, spritz, espresso and gelato at the real bars and cafés, and a few things only a Padovano would look for.
+- A title screen and pause menu with three picture presets, an interactive city map with waypoints, 255 places to discover, and an assisted sightseeing plane.
 
 Development, builds and tests run locally. Unity Cloud, Unity Version Control, Cloud Build and paid Unity Gaming Services are disconnected.
 
@@ -65,10 +69,10 @@ brew install cgal
 
 ## Quickstart
 
-### 1. Clone the Unity branch
+### 1. Clone the repository
 
 ```sh
-git clone --branch scandolo/unity-foundation https://github.com/scandolo/padova-open-world.git
+git clone https://github.com/scandolo/padova-open-world.git
 cd padova-open-world
 ```
 
@@ -84,26 +88,27 @@ unity open .
 
 ### 3. Start playing
 
-Open **`Assets/Scenes/PadovaPlayable.unity`** in the Project window and press **Play**. The city geometry is generated from the included plans when the scene loads. The character starts in Piazza della Frutta.
+Open **`Assets/Scenes/PadovaPlayable.unity`** in the Project window and press **Play**. The city is built from the included plans and compiled packs as you move. The character starts in Piazza della Frutta; press Enter on the title screen.
 
 `Assets/Scenes/PadovaCentroSurvey.unity` is a separate cartographic inspection scene with source-record selection; it is not the game scene.
 
 ### Controls
 
-| Input | On foot | Driving | Flight |
+| Key | On foot | At the wheel | Flight |
 | --- | --- | --- | --- |
-| Arrow keys / WASD | Move relative to the camera | Accelerate, reverse, steer | Climb, descend, bank |
-| Shift | Run | — | Fly faster |
-| Space | Jump | Brake | Slow down |
-| Return | Enter a nearby car | Exit when stopped | — |
-| M | Toggle map | Toggle map | Toggle map |
-| F | Start airborne tour | Start tour after stopping | Return to the previous walking position |
-| R | Return to the market | Reset the car | End flight |
-| Q / E or click-drag | Orbit camera | — | — |
-| C / scroll | Centre camera / zoom | — | — |
-| Tab | Toggle running | — | — |
-
-The map pauses the simulation. Drag to pan, scroll to zoom and click to place a waypoint; M or Esc closes it. Blue squares mark cars on Via Dante, Corso Milano and Via Roma. Waypoint distances are straight-line distances, not driving routes.
+| W A S D / arrows | Walk | Drive and steer | Climb, descend, bank |
+| Shift | Sprint | Turbo | Faster |
+| Space | Jump | Handbrake | Slower |
+| E (or Return) | Take a parked vehicle, or steal one from traffic | Get out | — |
+| Q | — | Horn | — |
+| R | — | Put the car back on the road | End flight |
+| F | Sightseeing flight | Sightseeing flight | Back to where you were |
+| B | Order at a bar, café or gelateria | — | — |
+| J, then 1–4 | Jobs: taxi, sprint, deliveries, sprint to a landmark (0 quits) | same | — |
+| M | City map: drag, scroll, click for a waypoint | same | same |
+| T | Skip to the next part of the day | same | same |
+| C / mouse drag / scroll | Camera view / look around / zoom | same | — |
+| H / Esc | Key hints / menu (picture preset, volume, controls) | same | same |
 
 ### 4. Build a native Mac app
 
@@ -162,11 +167,17 @@ Generated city meshes use `HideFlags.DontSave`: the scene stores the plans and c
 
 [Tools/world/map.py](Tools/world/map.py) draws a north-up map from the same polygons used by the city. [verify_sources.py](Tools/world/verify_sources.py) compares the expansion's outlines, elevations and clearances with the original municipal shapefile.
 
-### 5. Add gameplay and verification
+### 5. Compile the whole comune
+
+[Tools/city/compile_city.py](Tools/city/compile_city.py) turns the municipal survey into binary 256 m tiles (`Assets/StreamingAssets/City`, 67 MB); `roads.py` and `places.py` add the drivable graph, named places and house numbers. At run time `CityStreamer` meshes tiles on worker threads: one material and three draw calls per distant tile, modelled façades from the same `FacadeBuilder` near the player. [docs/CITY_ENGINE.md](docs/CITY_ENGINE.md) has the pipeline, the pack format and what is evidence versus typology.
+
+### 6. Add gameplay and verification
 
 - **Walking:** `ThirdPersonMotor` uses a `CharacterController`; `ThirdPersonCamera` follows it and retracts at obstructions. Kenney animation curves are remapped to the imported skeleton.
 - **Pedestrians:** `CityCrowd` spawns animated `NavMeshAgent` characters on an Editor-baked navigation mesh, with path checks and local avoidance.
-- **Cars:** `CityCar` uses a `Rigidbody` and four `WheelCollider` suspension units for acceleration, steering and braking.
+- **Vehicles:** `CityCar` is a ray-cast arcade model on a `Rigidbody`; `VehicleCatalog` holds the handling of each type and `VehicleFactory` builds them from the Blender library. `CityTraffic`, `ParkedCars` and `StreetWalkers` fill the streets from the road graph.
+- **Atmosphere:** `DayCycle` moves the sun and publishes the night level; `SoundBank` and `CityAudio` synthesise and mix every sound.
+- **Game loop:** `Activities` (jobs), `Police`, `EasterEggs`, `GameMenu` and `Quality`.
 - **Flight:** `TourPlane` implements assisted arcade motion, altitude limits and boundary recovery. `OpenWorld` manages entering/exiting vehicles, camera changes and safe return to walking.
 - **Map and HUD:** `OpenWorld` provides pan/zoom, coordinate conversion, waypoints, discovery state and mode-specific controls.
 - **Automation:** compiled `GameplayProbe` and `WorldProbe` commands expose state through Unity Pipeline. Python verification sends real Input System events and asserts observed results.
@@ -180,12 +191,15 @@ Assets/
   Scenes/             Playable scene and survey inspection scene
   Scripts/
     Geography/        Source records and survey inspection
-    Architecture/     City, façades, roofs, landmarks and surroundings
+    Architecture/     Core city, façades, roofs, landmarks; City/ is the streamed city engine
     Gameplay/         Walking character, camera and probes
-    World/            Cars, crowd, aircraft, map and exploration state
+    World/            Vehicles, traffic, people, jobs, police, day and night, sound, menus
   Art/                Textures, materials, sky and character source assets
   Geography/          Imported core city plan and survey assets
-  World/              Imported outer plan, map, cars and pedestrian NavMesh
+  World/              Road and landmark plan, map sheets, city material, pedestrian NavMesh
+  StreamingAssets/City/  Compiled city packs, road graph, places and addresses
+  Resources/          Vehicle prefabs and run-time shaders
+  Shaders/            City, glass and minimap shaders
   Tests/EditMode/     Project, survey, character and world tests
 AgentScripts/         Unity API builders and offscreen capture scripts
 Data/                 Geographic snapshots, generated plans and provenance
@@ -219,12 +233,14 @@ unity command test_status --project-path "$PWD" --format json
 
 # Geographic tests using the versioned source snapshots
 .context/geo-venv/bin/python -m unittest discover -s Tools/geodata -v
+# City pack, road graph and address tests (numpy only)
+.context/city/venv/bin/python -m unittest Tools/city/test_city.py
 
 # Focused native verification, reusing an unchanged matching build
-python3 Tools/verify_world.py --case map,car,flight,crowd
+python3 Tools/verify_world.py --headless --case map,car,night,parked,jobs,secrets
 ```
 
-The native verifier checks the build's source fingerprint, process ID, scene readiness and application focus. Reports and screenshots go into `.context/`. See [the development loop](docs/AGENT_DEVELOPMENT_LOOP.md) and [playable verification](docs/PLAYABLE.md) for evidence and known automation issues.
+`--headless` runs the Player hidden: full rendering and HUD, no window, no sound. The native verifier checks the build's source fingerprint, process ID, scene readiness and application focus. Reports and screenshots go into `.context/`. See [the development loop](docs/AGENT_DEVELOPMENT_LOOP.md) and [playable verification](docs/PLAYABLE.md) for evidence and known automation issues.
 
 ### Rebuild the scene from the included plans
 
@@ -245,7 +261,8 @@ Regenerating the **geographic inputs** is a separate, optional workflow. It requ
 - Municipal records date from **2007**; the game is not a certified model of present-day Padova.
 - Ordinary façade details, roof shapes, material finishes and much landmark ornament are typology or reference-informed models, rather than per-building scans.
 - The world is finite. The surroundings have less architectural detail than the central district.
-- Cars are player-driven; autonomous traffic, building interiors and a broader mission system are not implemented.
+- No building interiors. Roads lie flat on the terrain: flyovers and underpasses are not raised or sunk.
+- Sound is synthesised and has been checked by measurement, not by ear, in automated runs.
 - Flight starts airborne. There is no airport, takeoff, landing or flight-simulator physics.
 - The M4 Air target is sustained smooth play. Short walking samples reached 60 FPS, but RPC-heavy tests showed stalls and later Pipeline timeouts. Flight and 20-minute sustained/thermal performance are not certified.
 
