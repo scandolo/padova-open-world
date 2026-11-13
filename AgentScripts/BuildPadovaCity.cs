@@ -124,7 +124,8 @@ public static class BuildPadovaCity
     {
         // HDRI sky (Poly Haven CC0) for sky, ambient and reflections.
         var sky = (TextureImporter)AssetImporter.GetAtPath(SkyPath);
-        if (sky.maxTextureSize != 4096 || sky.mipmapEnabled == false) { sky.maxTextureSize = 4096; sky.mipmapEnabled = true; sky.SaveAndReimport(); }
+        // No mip chain: the panoramic shader's longitude wraps once, and with mips that wrap draws a one-pixel seam up the sky.
+        if (sky.maxTextureSize != 4096 || sky.mipmapEnabled) { sky.maxTextureSize = 4096; sky.mipmapEnabled = false; sky.SaveAndReimport(); }
         var skyMat = AssetDatabase.LoadAssetAtPath<Material>(Mat + "Sky.mat");
         if (!skyMat) { skyMat = new Material(Shader.Find("Skybox/Panoramic")); AssetDatabase.CreateAsset(skyMat, Mat + "Sky.mat"); }
         skyMat.SetTexture("_MainTex", AssetDatabase.LoadAssetAtPath<Texture>(SkyPath));
