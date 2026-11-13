@@ -337,15 +337,22 @@ def refine_units(units, info, terrain):
         area = u.poly.area
         height = u.top - min(u.ground, u.base)
         cls_name = CLASSES[u.cls]
-        if not u.minor and area < 140 and height > 24 and height / math.sqrt(area) > 2.4:
+        historic = info[u.b]["historic"] if u.b >= 0 else False
+        slender = not u.minor and area < 140 and height > 24 and height / math.sqrt(area) > 2.4
+        # Bell towers and medieval towers; a slender modern volume is a lift or stair core, not a campanile.
+        if slender and (cls_name == "church" or historic and cls_name in ("townhouse", "palazzo", "civic")):
             u.cls = C["tower"]
+            cls_name = "tower"
         round_ = 4 * math.pi * area / (u.poly.exterior.length ** 2) > 0.86 and len(u.poly.exterior.coords) > 8
+        modern = cls_name in ("condo", "office", "commercial", "shed", "station", "sport") or cls_name == "civic" and not historic
         if u.minor:
             u.roof = ROOF_NONE if u.ridge else ROOF_FLAT
         elif round_ and 25 < area < 1500 and cls_name in ("church", "civic", "palazzo") and not u.suspended:
             u.roof = ROOF_DOME
-        elif CLASSES[u.cls] == "tower":
+        elif cls_name == "tower":
             u.roof = ROOF_SPIRE
+        elif modern and (area < 60 or slender):
+            u.roof = ROOF_FLAT                      # roof-top plant rooms, lift and stair cores
         elif cls_name in ("office", "commercial"):
             u.roof = ROOF_FLAT
         elif cls_name == "condo":
@@ -353,7 +360,7 @@ def refine_units(units, info, terrain):
         elif cls_name == "shed":
             u.roof = ROOF_FLAT if area > 2200 or rnd(f"flat{u.b}") < 0.35 else ROOF_NONE
         elif cls_name in ("civic", "station", "sport"):
-            u.roof = ROOF_FLAT if (not info[u.b]["historic"] if u.b >= 0 else True) and rnd(f"flat{u.b}") < 0.5 else ROOF_NONE
+            u.roof = ROOF_FLAT if not historic and rnd(f"flat{u.b}") < 0.5 else ROOF_NONE
 
 
 SLOPE = {"church": 0.45, "shed": 0.14, "sport": 0.16, "station": 0.2, "condo": 0.3, "house": 0.36, "rural": 0.38,
@@ -429,8 +436,14 @@ def flat_faces(poly):
     return nodes, [([int(idx[k]), int(idx[k + 1]), int(idx[k + 2])], 0) for k in range(0, len(idx), 3)]
 
 
-def skeleton_faces(faces, poly_exposed):
-    """Index CGAL skeleton faces: shared nodes, contour edge first, exposure flag per face."""
+GABLE_SHARE = {"church": 1.0, "shed": 0.85, "sport": 0.8, "minor": 0.7, "rural": 0.6, "station": 0.6, "house": 0.5,
+               "townhouse": 0.3, "civic": 0.25, "condo": 0.2, "palazzo": 0.1}
+
+
+def skeleton_faces(faces, poly_exposed, gable_ends=False):
+    """Index CGAL skeleton faces: shared nodes, contour edge first, exposure flag per face.
+    A hip end against a neighbour's wall always becomes a gable (a roof cannot slope down into a wall);
+    free ends become gables when <paramref name="gable_ends"/> says the building has that roof type."""
     index, nodes, out = {}, [], []
     for face in faces:
         m = len(face)
@@ -449,7 +462,28 @@ def skeleton_faces(faces, poly_exposed):
             ids.append(index[key])
         a, b = face[pair[0], :2], face[pair[1], :2]
         out.append((ids, F_EXPOSED if poly_exposed(a, b) else 0))
-    return nodes, out
+    use = defaultdict(int)
+    for ids, _ in out:
+        for i in ids:
+            use[i] += 1
+    nodes = [list(n) for n in nodes]
+    for k, (ids, flags) in enumerate(out):
+        if len(ids) != 3 or use[ids[2]] != 3:
+            continue
+        a, b, c = (nodes[i] for i in ids)
+        ex, ez = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(ex, ez)
+        # A hip end: a triangle whose apex lies about half its edge length inside the outline.
+        if not 2.5 < length < 24 or c[2] < 0.6 or abs(c[2] - length / 2) > 0.3 * length:
+            continue
+        if flags & F_EXPOSED and not gable_ends:
+            continue
+        along = ((c[0] - a[0]) * ex + (c[1] - a[1]) * ez) / (length * length)
+        if not 0.2 < along < 0.8:
+            continue
+        c[0], c[1] = a[0] + ex * along, a[1] + ez * along       # slide the ridge end out over the wall
+        out[k] = (ids, F_GABLE)
+    return [tuple(n) for n in nodes], out
 
 
 # ---------------------------------------------------------------- binary tile writer
@@ -649,6 +683,9 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
             blob.u16s(idx)
         stats["units"] += 1
 
+    stats["bytesUnits"] += sum(map(len, blob.parts))
+    mark = sum(map(len, blob.parts))
+
     # ---- roofs (groups whose representative point falls in this tile)
     roofs = []
     for gi in G["group_tiles"].get((tx, tz), ()):
@@ -684,7 +721,8 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
                 stats["roofFailures"] += 1
                 roofs.append((members[0], top, slope, *flat_faces(poly)))
                 continue
-            nodes, indexed = skeleton_faces(faces, exposed)
+            gable_ends = rnd(f"gable{members[0].b}{members[0].id}") < GABLE_SHARE.get(cls_name, 0.3)
+            nodes, indexed = skeleton_faces(faces, exposed, gable_ends)
             roofs.append((members[0], top, slope, nodes, indexed))
             stats["skeletons"] += 1
     blob.w("H", len(roofs))
@@ -695,6 +733,8 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
             blob.w("BB", len(ids), flags)
             blob.u16s(ids)
     stats["roofs"] += len(roofs)
+    stats["bytesRoofs"] += sum(map(len, blob.parts)) - mark
+    mark = sum(map(len, blob.parts))
 
     # ---- ground
     try:
@@ -712,6 +752,8 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
     blob.w("I", len(curbs))
     blob.floats(curbs)
     stats["patches"] += len(patches)
+    stats["bytesGround"] += sum(map(len, blob.parts)) - mark
+    mark = sum(map(len, blob.parts))
 
     # ---- props
     trees = G["tree_tiles"].get((tx, tz), ())
@@ -725,6 +767,7 @@ def compile_tile(tx, tz, units, tree, street_tree, terrain):
         blob.floats([c for p in pts for c in p])
     stats["trees"] += len(trees)
     stats["walls"] += len(walls)
+    stats["bytesProps"] += sum(map(len, blob.parts)) - mark
     if not emit and not patches and not trees and not walls:
         return None
     return blob.bytes(), stats

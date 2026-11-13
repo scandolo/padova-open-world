@@ -138,7 +138,7 @@ namespace Padova.City
         /// <summary>Ground surfaces by survey kind (order of GroundKind).</summary>
         public static readonly Surface[] Ground =
         {
-            new Surface(Layer.Earth, .62f, .6f, .5f, 6f),        // base: land the survey does not classify
+            new Surface(Layer.Gravel, .68f, .66f, .6f, 4f),      // base: land the survey does not classify
             new Surface(Layer.Asphalt, .3f, .31f, .33f, 5f),     // carriageway
             new Surface(Layer.Sidewalk, 1f, 1f, 1f, 3f),
             new Surface(Layer.Trachyte, .95f, .95f, .95f, 4f),   // pedestrian area

@@ -108,8 +108,8 @@ Shader "Padova/City"
                     half b = SAMPLE_TEXTURE2D_ARRAY(_Layers, sampler_Layers, i.uv * 1.7 - flow * 1.3, layer).r;
                     n = normalize(half3((a - 0.5) * 0.35, 1, (b - 0.5) * 0.35));
                     half fresnel = pow(1.0 - saturate(dot(n, view)), 4.0);
-                    albedo = lerp(i.color.rgb * (0.75 + 0.5 * a * b), half3(0.55, 0.66, 0.74), fresnel * 0.65);
-                    gloss = 1;
+                    albedo = lerp(i.color.rgb * (0.75 + 0.5 * a * b), half3(0.3, 0.4, 0.48), fresnel * 0.5);
+                    gloss = 0.5;
                 }
                 else
                 {

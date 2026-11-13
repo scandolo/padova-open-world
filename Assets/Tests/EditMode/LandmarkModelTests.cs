@@ -21,7 +21,9 @@ namespace PadovaOpenWorld.Tests
             world=Object.FindFirstObjectByType<WorldContext>();
             manifest=JsonUtility.FromJson<LandmarkManifest>(AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Art/Landmarks/Landmarks.json").text);
             sources=JsonUtility.FromJson<Sources>(System.IO.File.ReadAllText("Data/Landmarks/sources.json"));
-            models=GameObject.Find("Landmark models").transform;Physics.SyncTransforms();
+            models=GameObject.Find("Landmark models").transform;
+            // Streamed ground and walls only exist near a viewpoint: load the tiles around the two models.
+            world.RefreshVisibility(new Vector3(350,2,-850));Physics.SyncTransforms();
         }
         Transform Part(string model,string part)=>models.Find(model).GetComponentsInChildren<MeshFilter>(true).First(f=>f.name==part).transform;
 

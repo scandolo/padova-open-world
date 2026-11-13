@@ -353,7 +353,7 @@ MonoBehaviour:
   RunToggled: 0
   MoveInput: {x: 0, y: 0}
   SpawnYaw: 180
-  WorldHalfSize: {x: 1400, y: 1200}
+  WorldHalfSize: {x: 5432, y: 5688}
 --- !u!143 &128491051
 CharacterController:
   m_ObjectHideFlags: 0
@@ -1090,11 +1090,12 @@ MonoBehaviour:
   Plan: {fileID: 4900000, guid: fe6624e4e3cd5492a8840b2259715fab, type: 3}
   Landmarks: {fileID: 4900000, guid: 13e6404fca0724a5daad5f423e2502e6, type: 3}
   City: {fileID: 1117771736}
-  ViewDistance: 1200
-  CollisionDistance: 330
-  Buildings: 19325
+  ViewDistance: 1500
+  CollisionDistance: 430
+  CityMaterial: {fileID: 2100000, guid: 5f7368e89627343f792795f3227e4e94, type: 2}
+  Buildings: 100134
   Chunks: 347
-  BuildMilliseconds: 1108.3907
+  BuildMilliseconds: 2.4088
 --- !u!4 &571351337
 Transform:
   m_ObjectHideFlags: 0
@@ -3752,7 +3753,7 @@ MonoBehaviour:
   Vertices: 3156517
   Triangles: 1533557
   Chunks: 43
-  BuildMilliseconds: 448.4909
+  BuildMilliseconds: 3631.447
 --- !u!4 &1117771737
 Transform:
   m_ObjectHideFlags: 0

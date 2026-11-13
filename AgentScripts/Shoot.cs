@@ -49,6 +49,33 @@ public static class Shoot
         return written;
     }
 
+    /// <summary>Street-level shots that cannot end up inside a building: "via roma@0.3;corso milano@0.6" picks the named
+    /// road centreline at that fraction of its length and looks along it from eye height.</summary>
+    public static object Streets(string spec, string outDir = ".context/views", float height = 1.7f, float side = 0)
+    {
+        var world = Object.FindFirstObjectByType<Padova.Architecture.WorldContext>();
+        var views = new List<string>();
+        foreach (var item in spec.Split(';'))
+        {
+            var parts = item.Trim().Split('@');
+            float t = parts.Length > 1 ? float.Parse(parts[1], CultureInfo.InvariantCulture) : .5f;
+            Padova.Architecture.WorldRoad best = null;
+            foreach (var road in world.Data.roads)
+                if (road.name != null && road.name.ToLowerInvariant().Contains(parts[0].ToLowerInvariant()) && (best == null || road.points.Length > best.points.Length)) best = road;
+            if (best == null) continue;
+            int n = best.points.Length / 2, i = Mathf.Clamp((int)(t * (n - 1)), 0, n - 2);
+            var a = new Vector3(best.points[2 * i], 0, best.points[2 * i + 1]);
+            var b = new Vector3(best.points[2 * i + 2], 0, best.points[2 * i + 3]);
+            var dir = (b - a).normalized;
+            var eye = a + new Vector3(dir.z, 0, -dir.x) * side;
+            eye.y = world.Data.GroundAt(eye.x, eye.z) + height;
+            var target = eye + dir * 40 + Vector3.up * 3;
+            string label = parts[0].Replace(' ', '-') + "-" + Mathf.RoundToInt(t * 100);
+            views.Add(string.Format(CultureInfo.InvariantCulture, "{0}:{1},{2},{3}:{4},{5},{6}", label, eye.x, eye.y, eye.z, target.x, target.y, target.z));
+        }
+        return Views(string.Join(";", views), outDir);
+    }
+
     static Vector3 Parse(string s)
     {
         var v = s.Split(',');

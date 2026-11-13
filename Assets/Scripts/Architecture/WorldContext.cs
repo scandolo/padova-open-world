@@ -40,6 +40,8 @@ namespace Padova.Architecture
     public sealed class WorldContext:MonoBehaviour
     {
         public TextAsset Plan,Landmarks;public PadovaCity City;public float ViewDistance=1500;public float CollisionDistance=430;
+        /// <summary>Asset using the Padova/City shader; referenced here so Player builds include the shader.</summary>
+        public Material CityMaterial;
         /// <summary>Surveyed volume units in the compiled city (several units can form one building).</summary>
         public int Buildings;public int Chunks;public float BuildMilliseconds;
         public WorldPlan Data{get;private set;}
@@ -55,7 +57,7 @@ namespace Padova.Architecture
             if(manifest.places.Length>0){var places=new List<WorldPlace>(Data.landmarks);places.AddRange(manifest.places);Data.landmarks=places.ToArray();}
             Streamer=GetComponent<CityStreamer>();
             if(!Streamer){Streamer=gameObject.AddComponent<CityStreamer>();Streamer.hideFlags=HideFlags.DontSave;}
-            Streamer.Core=City;Streamer.ShellRadius=ViewDistance;Streamer.ColliderRadius=CollisionDistance;
+            Streamer.Core=City;Streamer.CityMaterial=CityMaterial;Streamer.ShellRadius=ViewDistance;Streamer.ColliderRadius=CollisionDistance;
             if(Streamer.Open())
             {
                 // One terrain for gameplay and rendering.

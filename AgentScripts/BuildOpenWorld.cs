@@ -44,6 +44,21 @@ public static class BuildOpenWorld
         game.Police=game.GetComponent<Police>()??game.gameObject.AddComponent<Police>();game.Police.Game=game;game.Police.Traffic=game.Traffic;game.Police.Activities=game.Activities;game.Police.LightMaterial=beacon;
         game.Crowd.Count=64;
     }
+    /// <summary>Points the saved scene at the streamed city: the city material asset (so builds include its shader),
+    /// streaming distances and a play area as large as the compiled survey. Regenerates nothing else.</summary>
+    public static object City()
+    {
+        if(EditorApplication.isPlaying)throw new InvalidOperationException("Stop Play Mode first.");
+        var scene=EditorSceneManager.OpenScene("Assets/Scenes/PadovaPlayable.unity",OpenSceneMode.Single);
+        AssetDatabase.ImportAsset("Assets/Shaders/City.shader",ImportAssetOptions.ForceSynchronousImport);
+        string path=Folder+"/City.mat";var material=AssetDatabase.LoadAssetAtPath<Material>(path);
+        if(!material){material=new Material(Shader.Find("Padova/City"));AssetDatabase.CreateAsset(material,path);}
+        var world=UnityEngine.Object.FindFirstObjectByType<WorldContext>();world.CityMaterial=material;world.ViewDistance=1500;world.CollisionDistance=430;world.Build();
+        var game=UnityEngine.Object.FindFirstObjectByType<OpenWorld>();var e=world.Data.extent;
+        game.Player.WorldHalfSize=new Vector2(Mathf.Min(-e[0],e[2])-200,Mathf.Min(-e[1],e[3])-200);
+        EditorUtility.SetDirty(world);EditorUtility.SetDirty(game.Player);AssetDatabase.SaveAssets();EditorSceneManager.MarkSceneDirty(scene);EditorSceneManager.SaveScene(scene);
+        return new{material=path,world.Buildings,extent=string.Join(",",e),halfSize=game.Player.WorldHalfSize.ToString()};
+    }
     // Connect gameplay without regenerating existing architecture, navigation or vehicle assets.
     public static object Gameplay()
     {
@@ -62,7 +77,7 @@ public static class BuildOpenWorld
         Import("Data/World/Map.png",Folder+"/Map.png");
         var ti=(TextureImporter)AssetImporter.GetAtPath(Folder+"/Map.png");ti.textureCompression=TextureImporterCompression.Uncompressed;ti.maxTextureSize=4096;ti.mipmapEnabled=false;ti.wrapMode=TextureWrapMode.Clamp;ti.SaveAndReimport();
         var city=UnityEngine.Object.FindFirstObjectByType<PadovaCity>();city.IncludeHorizon=false;city.Build();
-        var world=new GameObject("Wider Padova").AddComponent<WorldContext>();world.City=city;world.Plan=AssetDatabase.LoadAssetAtPath<TextAsset>(Folder+"/WorldPlan.json");world.Landmarks=AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Art/Landmarks/Landmarks.json");world.Build();
+        var world=new GameObject("Wider Padova").AddComponent<WorldContext>();world.City=city;world.Plan=AssetDatabase.LoadAssetAtPath<TextAsset>(Folder+"/WorldPlan.json");world.Landmarks=AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Art/Landmarks/Landmarks.json");world.CityMaterial=AssetDatabase.LoadAssetAtPath<Material>(Folder+"/City.mat");world.Build();
         var streets=new GameObject("Street life").AddComponent<Streetscape>();streets.City=city;streets.Build();
         var root=new GameObject("Open world");var game=root.AddComponent<OpenWorld>();game.Player=UnityEngine.Object.FindFirstObjectByType<ThirdPersonMotor>();game.City=world;game.MapTexture=AssetDatabase.LoadAssetAtPath<Texture2D>(Folder+"/Map.png");
         game.Player.WorldHalfSize=new Vector2(1400,1200);
