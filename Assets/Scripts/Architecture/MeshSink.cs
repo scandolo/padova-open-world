@@ -134,6 +134,43 @@ namespace Padova.Architecture
 
         public bool Has(Slot slot) => indices[(int)slot] != null && indices[(int)slot].Count > 0;
 
+        /// <summary>Per-vertex tangents from UVs; safe to call on a worker thread, unlike Mesh.RecalculateTangents.</summary>
+        public Vector4[] ComputeTangents()
+        {
+            var tan = new Vector3[Positions.Count];
+            foreach (var list in indices)
+            {
+                if (list == null) continue;
+                for (int k = 0; k + 2 < list.Count; k += 3)
+                {
+                    int a = list[k], b = list[k + 1], c = list[k + 2];
+                    Vector3 e1 = Positions[b] - Positions[a], e2 = Positions[c] - Positions[a];
+                    Vector2 d1 = Uvs[b] - Uvs[a], d2 = Uvs[c] - Uvs[a];
+                    float det = d1.x * d2.y - d2.x * d1.y;
+                    if (Mathf.Abs(det) < 1e-9f) continue;
+                    var t = (e1 * d2.y - e2 * d1.y) / det;
+                    tan[a] += t; tan[b] += t; tan[c] += t;
+                }
+            }
+            var result = new Vector4[tan.Length];
+            for (int k = 0; k < tan.Length; k++)
+            {
+                var n = Normals[k];
+                var t = tan[k] - n * Vector3.Dot(n, tan[k]);
+                if (t.sqrMagnitude < 1e-10f) t = Vector3.Cross(n, Mathf.Abs(n.y) < .9f ? Vector3.up : Vector3.right);
+                t.Normalize();
+                result[k] = new Vector4(t.x, t.y, t.z, 1);
+            }
+            return result;
+        }
+
+        public Mesh ToMesh(string name, Material[] palette, out Material[] materials, Vector4[] precomputedTangents)
+        {
+            var mesh = ToMesh(name, palette, out materials, false);
+            if (precomputedTangents != null) mesh.SetTangents(precomputedTangents);
+            return mesh;
+        }
+
         public Mesh ToMesh(string name, Material[] palette, out Material[] materials, bool tangents = true)
         {
             var mesh = new Mesh { name = name, indexFormat = Positions.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16 };

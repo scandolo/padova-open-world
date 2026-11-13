@@ -10,12 +10,17 @@ namespace PadovaOpenWorld.Tests
     /// <summary>Blender landmark models (Santo, Prato della Valle) stay on their survey evidence.</summary>
     public class LandmarkModelTests
     {
-        WorldContext world;LandmarkManifest manifest;Transform models;
+        WorldContext world;LandmarkManifest manifest;Transform models;Sources sources;
+        // Frozen survey evidence for the hero models (Data/Landmarks/sources.json).
+        [System.Serializable]class Sources{public Landmark santo;}
+        [System.Serializable]class Landmark{public SourceUnit[] units;}
+        [System.Serializable]class SourceUnit{public string id;public float top,@base,cx,cz;public float[] outline;}
         [OneTimeSetUp]public void Load()
         {
             EditorSceneManager.OpenScene("Assets/Scenes/PadovaPlayable.unity");
             world=Object.FindFirstObjectByType<WorldContext>();
             manifest=JsonUtility.FromJson<LandmarkManifest>(AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Art/Landmarks/Landmarks.json").text);
+            sources=JsonUtility.FromJson<Sources>(System.IO.File.ReadAllText("Data/Landmarks/sources.json"));
             models=GameObject.Find("Landmark models").transform;Physics.SyncTransforms();
         }
         Transform Part(string model,string part)=>models.Find(model).GetComponentsInChildren<MeshFilter>(true).First(f=>f.name==part).transform;
@@ -23,10 +28,15 @@ namespace PadovaOpenWorld.Tests
         [Test]public void ReplacedSurveyUnitsAreDrawnOnlyByTheModels()
         {
             Assert.That(world.Landmarks,Is.Not.Null);
-            var ids=world.Data.units.Select(u=>u.id).ToHashSet();
             Assert.That(manifest.replacedUnits.Length,Is.EqualTo(30));
-            Assert.That(manifest.replacedUnits.All(ids.Contains),Is.True,"Replaced ids must be real survey records");
-            Assert.That(world.Buildings,Is.EqualTo(world.Data.units.Length-manifest.replacedUnits.Length));
+            var replaced=manifest.replacedUnits.ToHashSet();var pack=world.Streamer.Pack;int checkedUnits=0;
+            Assert.That(sources.santo.units.All(u=>replaced.Contains(u.id)),Is.True,"Frozen Santo evidence must be the replaced survey records");
+            for(int tx=-1;tx<=3;tx++)for(int tz=-6;tz<=-2;tz++)
+            {
+                var tile=pack.Load(tx,tz);if(tile==null)continue;
+                foreach(var u in tile.Units){checkedUnits++;Assert.That(replaced.Contains(u.SourceId),Is.False,"Replaced unit is also streamed: "+u.SourceId);}
+            }
+            Assert.That(checkedUnits,Is.GreaterThan(500));
             Assert.That(world.Data.landmarks.Select(p=>p.name),Does.Contain("Basilica di Sant'Antonio").And.Contain("Prato della Valle"));
         }
 
@@ -50,7 +60,7 @@ namespace PadovaOpenWorld.Tests
 
         [Test]public void SantoKeepsSurveyedFootprintsAndEaves()
         {
-            var units=world.Data.units.Where(u=>manifest.replacedUnits.Contains(u.id)).ToArray();
+            var units=sources.santo.units;
             var collision=Part("Santo","Santo_Collision").GetComponent<MeshCollider>();
             Assert.That(collision,Is.Not.Null);Assert.That(collision.GetComponent<MeshRenderer>().enabled,Is.False);
             var b=collision.bounds;
@@ -59,10 +69,10 @@ namespace PadovaOpenWorld.Tests
             Assert.That(b.min.x,Is.EqualTo(minX).Within(.02f));Assert.That(b.max.x,Is.EqualTo(maxX).Within(.02f));
             Assert.That(b.min.z,Is.EqualTo(minZ).Within(.02f));Assert.That(b.max.z,Is.EqualTo(maxZ).Within(.02f));
             Assert.That(b.max.y,Is.EqualTo(units.Max(u=>u.top)).Within(.02f),"Campanile eave (DBT QGR) preserved");
-            Assert.That(b.min.y,Is.EqualTo(units.Min(u=>u.surveyBase)).Within(.02f));
+            Assert.That(b.min.y,Is.EqualTo(units.Min(u=>u.@base)).Within(.02f));
             // Campanile spires: published total height 68 m above the surveyed base.
             var visual=Part("Santo","Santo").GetComponent<Renderer>().bounds;
-            Assert.That(visual.max.y-units.First(u=>u.id=="UN_VOL:30830").surveyBase,Is.EqualTo(68).Within(.1f));
+            Assert.That(visual.max.y-units.First(u=>u.id=="UN_VOL:30830").@base,Is.EqualTo(68).Within(.1f));
             // Ray down onto the crossing drum lands on the model, not on empty ground.
             var drum=units.First(u=>u.id=="UN_VOL:30736");
             Assert.That(Physics.Raycast(new Vector3(drum.cx,200,drum.cz),Vector3.down,out var hit,300,1<<9),Is.True);

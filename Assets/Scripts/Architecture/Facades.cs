@@ -40,9 +40,10 @@ namespace Padova.Architecture
             return h;
         }
 
-        public static UnitStyle For(PlanUnit u)
+        /// <summary>The historic-centre vocabulary drawn deterministically from a seed (one seed per building keeps its volumes coherent).</summary>
+        public static UnitStyle Seeded(int seed)
         {
-            var r = new System.Random((int)(Hash(u.id) & 0x7fffffff));
+            var r = new System.Random(seed);
             float F(float a, float b) => a + (float)r.NextDouble() * (b - a);
             var s = new UnitStyle { Rng = r };
             s.Wall = Palette[r.Next(Palette.Length)];
@@ -64,7 +65,13 @@ namespace Padova.Architecture
             s.RoundColumns = F(0, 1) < 0.55f;
             s.ColumnSpacing = F(3.0f, 4.1f);
             s.ArcadeArch = F(0, 1) < 0.7f ? Arch.Round : Arch.Pointed;
-            if (F(0, 1) < 0.05f) { s.Wall = Slot.Brick; s.Brick = true; }
+            return s;
+        }
+
+        public static UnitStyle For(PlanUnit u)
+        {
+            var s = Seeded((int)(Hash(u.id) & 0x7fffffff));
+            if (s.Rng.NextDouble() < 0.05) { s.Wall = Slot.Brick; s.Brick = true; }
             if (u.use == "church")
             {
                 s.Church = true; s.Brick = true; s.Wall = Slot.Brick; s.Shutters = false; s.Balcony = false;

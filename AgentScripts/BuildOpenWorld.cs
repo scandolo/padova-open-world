@@ -59,7 +59,7 @@ public static class BuildOpenWorld
         var scene=EditorSceneManager.OpenScene("Assets/Scenes/PadovaPlayable.unity",OpenSceneMode.Single);
         if(!AssetDatabase.IsValidFolder(Folder))AssetDatabase.CreateFolder("Assets","World");
         foreach(string name in new[]{"Wider Padova","Street life","Open world"}){var old=GameObject.Find(name);if(old)UnityEngine.Object.DestroyImmediate(old);}
-        Import("Data/World/WorldPlan.json",Folder+"/WorldPlan.json");Import("Data/World/Map.png",Folder+"/Map.png");
+        Import("Data/World/Map.png",Folder+"/Map.png");
         var ti=(TextureImporter)AssetImporter.GetAtPath(Folder+"/Map.png");ti.textureCompression=TextureImporterCompression.Uncompressed;ti.maxTextureSize=4096;ti.mipmapEnabled=false;ti.wrapMode=TextureWrapMode.Clamp;ti.SaveAndReimport();
         var city=UnityEngine.Object.FindFirstObjectByType<PadovaCity>();city.IncludeHorizon=false;city.Build();
         var world=new GameObject("Wider Padova").AddComponent<WorldContext>();world.City=city;world.Plan=AssetDatabase.LoadAssetAtPath<TextAsset>(Folder+"/WorldPlan.json");world.Landmarks=AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Art/Landmarks/Landmarks.json");world.Build();

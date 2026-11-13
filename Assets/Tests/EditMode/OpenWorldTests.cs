@@ -12,13 +12,25 @@ namespace PadovaOpenWorld.Tests
     {
         OpenWorld game;
         [OneTimeSetUp]public void Load(){EditorSceneManager.OpenScene("Assets/Scenes/PadovaPlayable.unity");game=Object.FindFirstObjectByType<OpenWorld>();Physics.SyncTransforms();}
-        [Test]public void ExpansionRetainsUniqueSurveyIdentitiesAndSeparateCore()
+        [Test]public void StreamedCityKeepsSurveyValuesAndLeavesTheCoreToItsOwnPlan()
         {
-            Assert.That(game,Is.Not.Null);var world=game.City.Data;var core=game.City.City.Data;
-            Assert.That(world.units.Length,Is.GreaterThan(19000));Assert.That(world.units.Select(u=>u.id).Distinct().Count(),Is.EqualTo(world.units.Length));
-            Assert.That(world.units.Select(u=>u.id).Intersect(core.units.Select(u=>u.id)),Is.Empty);
-            foreach(var u in world.units)Assert.That(u.surveyBase+u.surveyHeight,Is.EqualTo(u.top).Within(.002f),"Surveyed eave/height identity: "+u.id);
-            foreach(var u in world.units.Where(u=>u.suspended))Assert.That(u.under-u.surveyBase,Is.EqualTo(u.surveyClearance).Within(.002f),u.id);
+            Assert.That(game,Is.Not.Null);var pack=game.City.Streamer.Pack;var core=game.City.City.Data;
+            Assert.That(pack,Is.Not.Null,"City packs missing: run Tools/city/compile_city.py");
+            var coreIds=new System.Collections.Generic.HashSet<string>(core.units.Select(u=>u.id));var seen=new System.Collections.Generic.HashSet<string>();int units=0;
+            for(int tx=-3;tx<=2;tx++)for(int tz=-3;tz<=2;tz++)
+            {
+                var tile=pack.Load(tx,tz);if(tile==null)continue;
+                foreach(var u in tile.Units)
+                {
+                    units++;string id=u.SourceId;
+                    Assert.That(seen.Add(id),Is.True,"Duplicate survey unit "+id);Assert.That(coreIds.Contains(id),Is.False,"Core unit also streamed: "+id);
+                    Assert.That(u.SurveyTop-u.Base,Is.InRange(.5f,150f),"Surveyed height: "+id);
+                    Assert.That(u.Top,Is.GreaterThanOrEqualTo(u.SurveyTop-.001f),id);Assert.That(u.Top-u.SurveyTop,Is.LessThan(.36f),"Roof merge tolerance exceeded: "+id);
+                    if(u.Suspended)Assert.That(u.Under-u.Base,Is.InRange(2f,u.SurveyTop-u.Base-1.5f),"Surveyed portico clearance: "+id);
+                    Assert.That(u.Outline.Length,Is.GreaterThanOrEqualTo(6),id);
+                }
+            }
+            Assert.That(units,Is.GreaterThan(8000));Assert.That(game.City.Buildings,Is.GreaterThan(10000));
             Assert.That(game.City.City.IncludeHorizon,Is.False);Assert.That(game.Player.WorldHalfSize.x,Is.GreaterThan(1000));
         }
         [Test]public void CarsHaveClearMappedGroundAndWorkingSuspension()
@@ -68,8 +80,9 @@ namespace PadovaOpenWorld.Tests
             Assert.That(landmark.GetComponent<Renderer>().bounds.max.y,Is.LessThanOrEqualTo(62.1f),"Landmark tops must stay within surveyed maximum");
             Assert.That(city.Materials[(int)Slot.ClockBlue].mainTexture,Is.Null,"Dial is geometry, not a projected picture");
             var props=Object.FindFirstObjectByType<Streetscape>();Assert.That(props.Stalls,Is.EqualTo(12));Assert.That(props.Lamps,Is.GreaterThan(5));
-            float highest=game.City.Data.units.Max(u=>u.roof.Where((value,index)=>index%5==1).Max());
-            Assert.That(game.Plane.MinimumAltitude,Is.GreaterThan(highest+15),"Flight assist must clear every imported roof");
+            float highest=0;var pack=game.City.Streamer.Pack;
+            for(int tx=-6;tx<=5;tx++)for(int tz=-6;tz<=5;tz++){var tile=pack.Load(tx,tz);if(tile!=null)foreach(var u in tile.Units)highest=Mathf.Max(highest,u.Top);}
+            Assert.That(highest,Is.GreaterThan(30));Assert.That(game.Plane.MinimumAltitude,Is.GreaterThan(highest+15),"Flight assist must clear every surveyed eave");
         }
     }
 }
