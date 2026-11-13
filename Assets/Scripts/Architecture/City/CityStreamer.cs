@@ -33,6 +33,53 @@ namespace Padova.City
         long shellTicks, detailTicks, bakeTicks;
 
         public CityPack Pack { get; private set; }
+        CityRoads roads;
+        float[] nodeWidth;
+        Dictionary<long, List<int>> roadTiles;
+
+        /// <summary>Gives the streamer the road graph so tiles get lane markings, crossings and lamps. Call before tiles load.</summary>
+        public void SetRoads(CityRoads graph)
+        {
+            roads = graph; roadTiles = null;
+            if (graph == null || Pack == null) return;
+            float t = Pack.Tile;
+            nodeWidth = new float[graph.NodeX.Length];
+            var index = new Dictionary<long, List<int>>();
+            for (int e = 0; e < graph.Edges.Length; e++)
+            {
+                var edge = graph.Edges[e];
+                nodeWidth[edge.A] = Mathf.Max(nodeWidth[edge.A], edge.Width); nodeWidth[edge.B] = Mathf.Max(nodeWidth[edge.B], edge.Width);
+                long last = long.MinValue;
+                for (int k = 0; k + 3 < edge.Points.Length; k += 2)
+                {
+                    var a = new Vector2(edge.Points[k], edge.Points[k + 1]); var b = new Vector2(edge.Points[k + 2], edge.Points[k + 3]);
+                    int steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(a, b) / 16));
+                    for (int i = 0; i <= steps; i++)
+                    {
+                        var p = Vector2.Lerp(a, b, i / (float)steps);
+                        // A lamp or an edge line sits beside the centreline: register the edge with every tile close to it.
+                        for (int dx = -1; dx <= 1; dx += 2)
+                            for (int dz = -1; dz <= 1; dz += 2)
+                            {
+                                long key = CityPack.Key(Mathf.FloorToInt((p.x + dx * 14) / t), Mathf.FloorToInt((p.y + dz * 14) / t));
+                                if (key == last) continue;
+                                last = key;
+                                if (!index.TryGetValue(key, out var list)) index[key] = list = new List<int>();
+                                if (list.Count == 0 || list[list.Count - 1] != e) list.Add(e);
+                            }
+                    }
+                }
+            }
+            roadTiles = index;
+        }
+
+        StreetInput Streets(int tx, int tz)
+        {
+            if (roads == null || roadTiles == null || !roadTiles.TryGetValue(CityPack.Key(tx, tz), out var list)) return null;
+            var edges = new RoadEdge[list.Count];
+            for (int i = 0; i < edges.Length; i++) edges[i] = roads.Edges[list[i]];
+            return new StreetInput { Edges = edges, Graph = roads, NodeWidth = nodeWidth, Core = Pack.Index.coreExtent, Tile = Pack.Tile };
+        }
         Texture2DArray layers;
         Material runtimeMaterial;
         Transform root;
@@ -187,11 +234,12 @@ namespace Padova.City
                     if (tile.ShellJob == null && (wait || running < MaxJobs))
                     {
                         int tx = tile.Tx, tz = tile.Tz;
+                        var streets = Streets(tx, tz);
                         System.Func<TileBuild> work = () =>
                         {
                             long start = System.Diagnostics.Stopwatch.GetTimestamp();
                             var data = pack.Load(tx, tz);
-                            var built = data == null ? null : TileMesher.Shell(data, terrain, levels);
+                            var built = data == null ? null : TileMesher.Shell(data, terrain, levels, streets);
                             System.Threading.Interlocked.Add(ref shellTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
                             return built;
                         };

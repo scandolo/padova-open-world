@@ -116,6 +116,11 @@ Shader "Padova/City"
                     albedo = SAMPLE_TEXTURE2D_ARRAY(_Layers, sampler_Layers, i.uv, layer).rgb * i.color.rgb;
                 }
 
+                // ---- lamp glass: pale by day, lit at night (facade.z < 0 marks it)
+                if (i.facade.z < -0.5)
+                {
+                    emission = albedo * (0.15 + 2.6 * _PadovaNight);
+                }
                 // ---- procedural façade
                 if (i.facade.z > 0.001)
                 {

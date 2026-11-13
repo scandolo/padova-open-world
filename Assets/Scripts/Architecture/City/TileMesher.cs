@@ -80,15 +80,28 @@ namespace Padova.City
         public Vector4[] DetailTangents;
     }
 
+    /// <summary>Road edges that cross a tile, with what the mesher needs to dress them.</summary>
+    public sealed class StreetInput
+    {
+        public RoadEdge[] Edges;
+        public CityRoads Graph;
+        /// <summary>Widest carriageway meeting at each node (m).</summary>
+        public float[] NodeWidth;
+        /// <summary>Extent of the hand-built core district, which keeps its own street dressing.</summary>
+        public float[] Core;
+        public float Tile;
+    }
+
     /// <summary>Turns compiled survey tiles into meshes. Pure functions over tile data: safe on worker threads.</summary>
     public static class TileMesher
     {
         const float MaxEdge = 48;
 
-        public static TileBuild Shell(TileData data, CityTerrain terrain, float[] levels)
+        public static TileBuild Shell(TileData data, CityTerrain terrain, float[] levels, StreetInput streets = null)
         {
             var build = new TileBuild { Data = data };
             Ground(build, terrain, levels);
+            if (streets != null) Streets(build, streets, terrain);
             foreach (var roof in data.Roofs) Roof(build.Always, roof);
             foreach (var unit in data.Units)
             {
@@ -182,6 +195,165 @@ namespace Padova.City
             }
             int i = sink.V(a, Vector3.up, new Vector2(a.x, a.z), surface), j = sink.V(b, Vector3.up, new Vector2(b.x, b.z), surface), k = sink.V(c, Vector3.up, new Vector2(c.x, c.z), surface);
             sink.Tri(i, j, k, Vector3.up);
+        }
+
+        // ------------------------------------------------------------------ streets
+        static readonly Surface Paint = new Surface(Layer.Plain, .9f, .9f, .86f);
+        static readonly Surface LampMetal = new Surface(Layer.Plain, .16f, .17f, .18f);
+        static readonly Surface LampIron = new Surface(Layer.Plain, .07f, .08f, .08f);
+        static readonly Surface LampGlass = new Surface(Layer.Plain, 1f, .86f, .6f);
+        static readonly Vector4 Glow = new Vector4(0, 0, -1, 0);
+
+        /// <summary>Lane markings, zebra crossings and street lamps along the surveyed centrelines that cross this tile.
+        /// Positions follow the survey graph and its measured widths; the pattern (dash rhythm, lamp spacing) is typology.</summary>
+        static void Streets(TileBuild build, StreetInput input, CityTerrain terrain)
+        {
+            var sink = build.Always;
+            float x0 = build.Data.Tx * input.Tile, z0 = build.Data.Tz * input.Tile, x1 = x0 + input.Tile, z1 = z0 + input.Tile;
+            bool Mine(float x, float z) => x >= x0 && x < x1 && z >= z0 && z < z1;
+            bool Core(float x, float z) => input.Core != null && x > input.Core[0] && x < input.Core[2] && z > input.Core[1] && z < input.Core[3];
+            // Bounding boxes of this tile's solid units: a lamp is never planted inside a building.
+            var units = build.Data.Units;
+            var boxes = new Vector4[units.Length];
+            for (int u = 0; u < units.Length; u++)
+            {
+                var o = units[u].Outline; int n = units[u].RingSizes[0];
+                float ax = float.MaxValue, az = float.MaxValue, bx = float.MinValue, bz = float.MinValue;
+                for (int k = 0; k < n; k++) { ax = Mathf.Min(ax, o[2 * k]); bx = Mathf.Max(bx, o[2 * k]); az = Mathf.Min(az, o[2 * k + 1]); bz = Mathf.Max(bz, o[2 * k + 1]); }
+                boxes[u] = new Vector4(ax - .4f, az - .4f, bx + .4f, bz + .4f);
+            }
+            bool Built(float x, float z)
+            {
+                for (int u = 0; u < units.Length; u++)
+                {
+                    var b = boxes[u];
+                    if (x < b.x || x > b.z || z < b.y || z > b.w || units[u].Suspended) continue;
+                    var o = units[u].Outline; int n = units[u].RingSizes[0]; bool inside = false;
+                    for (int i = 0, j = n - 1; i < n; j = i++)
+                        if ((o[2 * i + 1] > z) != (o[2 * j + 1] > z) && x < (o[2 * j] - o[2 * i]) * (z - o[2 * i + 1]) / (o[2 * j + 1] - o[2 * i + 1]) + o[2 * i]) inside = !inside;
+                    if (inside) return true;
+                }
+                return false;
+            }
+            void Strip(Vector2 a, Vector2 b, float half, float lift)
+            {
+                var d = (b - a).normalized; var n = new Vector2(-d.y, d.x) * half;
+                Vector3 P(Vector2 p) => new Vector3(p.x, terrain.At(p.x, p.y) + lift, p.y);
+                sink.Quad(Paint, P(a - n), P(a + n), P(b + n), P(b - n), Vector3.up, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
+            }
+            foreach (var edge in input.Edges)
+            {
+                if (edge.Pedestrian || edge.Points.Length < 4) continue;
+                int count = edge.Points.Length / 2;
+                var along = new float[count];
+                for (int k = 1; k < count; k++) along[k] = along[k - 1] + Mathf.Sqrt(Sq(edge.Points[2 * k] - edge.Points[2 * k - 2]) + Sq(edge.Points[2 * k + 1] - edge.Points[2 * k - 1]));
+                float length = along[count - 1];
+                if (length < 6) continue;
+                Vector2 At(float s, out Vector2 dir)
+                {
+                    int k = 1; while (k < count - 1 && along[k] < s) k++;
+                    var a = new Vector2(edge.Points[2 * k - 2], edge.Points[2 * k - 1]); var b = new Vector2(edge.Points[2 * k], edge.Points[2 * k + 1]);
+                    float span = along[k] - along[k - 1];
+                    dir = span > 1e-4f ? (b - a) / span : Vector2.right;
+                    return Vector2.Lerp(a, b, span > 1e-4f ? Mathf.Clamp01((s - along[k - 1]) / span) : 0);
+                }
+                float lift = edge.Bridge ? .16f : .035f, width = edge.Width;
+                bool oneWay = edge.OneWayForward || edge.OneWayBackward, big = edge.Class >= CityRoads.Main, fast = edge.Class == CityRoads.Fast;
+                // Junctions keep clear of paint: the wider the crossing roads, the longer the gap.
+                float clearA = input.Graph.NodeDegree[edge.A] >= 3 ? Mathf.Max(5, input.NodeWidth[edge.A] * .5f + 3) : 1.5f;
+                float clearB = input.Graph.NodeDegree[edge.B] >= 3 ? Mathf.Max(5, input.NodeWidth[edge.B] * .5f + 3) : 1.5f;
+                if (edge.Roundabout) { clearA = clearB = .5f; }
+                uint seed = (uint)(edge.A * 7919 + edge.B * 104729);
+                // ---- centre line or lane divider
+                bool centre = edge.Class >= CityRoads.Local && !edge.Roundabout && (oneWay ? width >= 6.4f && edge.Lanes >= 2 : width >= 5.4f);
+                if (centre)
+                    for (float s = clearA; s + 3 <= length - clearB; s += fast ? 12 : 7.5f)
+                    {
+                        float dash = fast ? 4.5f : 3;
+                        var a = At(s, out _); var b = At(s + dash, out _); var m = (a + b) * .5f;
+                        if (Mine(m.x, m.y) && !Core(m.x, m.y)) Strip(a, b, .06f, lift);
+                    }
+                // ---- edge lines on main and fast roads
+                if (big && !edge.Roundabout && width >= 6)
+                    for (float s = clearA; s < length - clearB; s += 8)
+                    {
+                        float e = Mathf.Min(s + 8, length - clearB);
+                        var a = At(s, out var da); var b = At(e, out var db); var m = (a + b) * .5f;
+                        if (!Mine(m.x, m.y) || Core(m.x, m.y)) continue;
+                        foreach (float side in new[] { -1f, 1f })
+                        {
+                            float off = side * (width * .5f - .35f);
+                            Strip(a + new Vector2(-da.y, da.x) * off, b + new Vector2(-db.y, db.x) * off, .06f, lift);
+                        }
+                    }
+                // ---- zebra crossings where streets meet
+                if (edge.Class >= CityRoads.Local && !fast && !edge.Roundabout && width >= 4.6f && length > 22)
+                    for (int end = 0; end < 2; end++)
+                    {
+                        int node = end == 0 ? edge.A : edge.B;
+                        if (input.Graph.NodeDegree[node] < 3) continue;
+                        if (!big && (seed + (uint)end * 31) % 100 > 55) continue;
+                        float clear = end == 0 ? clearA : clearB, s = end == 0 ? clear - 2.6f : length - clear + 2.6f;
+                        var c = At(s, out var dir);
+                        if (!Mine(c.x, c.y) || Core(c.x, c.y)) continue;
+                        var across = new Vector2(-dir.y, dir.x);
+                        int stripes = Mathf.Max(3, Mathf.FloorToInt((width - .6f) / 1f));
+                        for (int k = 0; k < stripes; k++)
+                        {
+                            var m = c + across * ((k - (stripes - 1) * .5f) * 1f);
+                            Strip(m - dir * 1.4f, m + dir * 1.4f, .25f, lift);
+                        }
+                    }
+                // ---- street lamps on alternating sides
+                if (edge.Class >= CityRoads.Local && !edge.Roundabout && length > 18)
+                {
+                    float spacing = fast ? 44 : big ? 34 : 30;
+                    int index = 0;
+                    for (float s = spacing * .5f + (seed % 9); s < length - 6; s += spacing, index++)
+                    {
+                        var c = At(s, out var dir);
+                        float side = fast ? 1 : (index + (int)(seed % 2)) % 2 == 0 ? 1 : -1;
+                        var across = new Vector2(-dir.y, dir.x) * side;
+                        var foot = c + across * (width * .5f + .7f);
+                        if (!Mine(foot.x, foot.y) || Core(foot.x, foot.y) || Built(foot.x, foot.y)) continue;
+                        Lamp(build, new Vector3(foot.x, terrain.At(foot.x, foot.y), foot.y), new Vector3(-across.x, 0, -across.y), big);
+                    }
+                }
+            }
+        }
+
+        static float Sq(float v) => v * v;
+
+        /// <summary>A lamp post: a tall arm lamp on main roads, a lantern on local streets. <paramref name="toRoad"/> points at the carriageway.</summary>
+        static void Lamp(TileBuild build, Vector3 foot, Vector3 toRoad, bool tall)
+        {
+            var sink = build.Always;
+            var right = Vector3.Cross(Vector3.up, toRoad);
+            if (tall)
+            {
+                float h = 8.2f;
+                sink.Box(LampMetal, foot + Vector3.up * (h * .5f), right * .07f, Vector3.up * (h * .5f), toRoad * .07f);
+                sink.Box(LampMetal, foot + Vector3.up * h + toRoad * .75f, right * .05f, Vector3.up * .05f, toRoad * .8f);
+                var head = foot + Vector3.up * (h - .08f) + toRoad * 1.45f;
+                sink.Box(LampMetal, head + Vector3.up * .06f, right * .16f, Vector3.up * .05f, toRoad * .34f);
+                sink.Quad(LampGlass, head - right * .13f - toRoad * .3f, head + right * .13f - toRoad * .3f, head + right * .13f + toRoad * .3f, head - right * .13f + toRoad * .3f, Vector3.down,
+                    Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Glow, Glow, Glow, Glow);
+            }
+            else
+            {
+                float h = 3.7f;
+                sink.Box(LampIron, foot + Vector3.up * .25f, right * .1f, Vector3.up * .25f, toRoad * .1f);
+                sink.Box(LampIron, foot + Vector3.up * (h * .5f), right * .045f, Vector3.up * (h * .5f), toRoad * .045f);
+                var c = foot + Vector3.up * (h + .28f);
+                // Lantern: four glowing panes under a small cap.
+                foreach (var (n, t) in new[] { (toRoad, right), (-toRoad, right), (right, toRoad), (-right, toRoad) })
+                    sink.Quad(LampGlass, c + n * .15f - t * .13f - Vector3.up * .26f, c + n * .15f + t * .13f - Vector3.up * .26f, c + n * .19f + t * .17f + Vector3.up * .22f, c + n * .19f - t * .17f + Vector3.up * .22f, n,
+                        Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Glow, Glow, Glow, Glow);
+                sink.Box(LampIron, c + Vector3.up * .28f, right * .23f, Vector3.up * .05f, toRoad * .23f);
+            }
+            Vector3 x = Vector3.right * .09f, z = Vector3.forward * .09f, up = Vector3.up * 3.2f, b = foot + Vector3.down * .2f;
+            ColliderQuad(build, b - x + z, b + x + z, b + x + z + up, b - x + z + up); ColliderQuad(build, b + x - z, b - x - z, b - x - z + up, b + x - z + up);
+            ColliderQuad(build, b + x + z, b + x - z, b + x - z + up, b + x + z + up); ColliderQuad(build, b - x - z, b - x + z, b - x + z + up, b - x - z + up);
         }
 
         // ------------------------------------------------------------------ roofs
@@ -581,23 +753,53 @@ namespace Padova.City
         static void GardenWall(TileBuild build, TileWall wall, CityTerrain terrain)
         {
             var sink = build.Always;
-            var pts = wall.Points;
+            var raw = wall.Points;
             bool hedge = wall.Kind == 1 && wall.Height < 1.7f;
-            float hash = Mathf.Abs(Mathf.Sin(pts[0] * 3.17f + pts[1] * 5.31f) * 9973f) % 1f;
+            float hash = Mathf.Abs(Mathf.Sin(raw[0] * 3.17f + raw[1] * 5.31f) * 9973f) % 1f;
             var surface = hedge ? CityStyle.HedgeGreen : hash < .22f ? CityStyle.BrickWall : CityStyle.GardenWall.Shade(.86f + hash * .16f);
+            var coping = hedge ? surface : CityStyle.StoneTrim.Shade(.85f);
             float half = hedge ? .28f : .11f, h = wall.Height;
-            for (int k = 0; k + 3 < pts.Length; k += 2)
+            var p = new List<Vector2>(raw.Length / 2);
+            for (int k = 0; k + 1 < raw.Length; k += 2)
             {
-                var a = new Vector2(pts[k], pts[k + 1]); var b = new Vector2(pts[k + 2], pts[k + 3]);
-                var f = new Frame(a, b);
-                if (f.L < .05f) continue;
-                float ga = terrain.At(a.x, a.y) - .1f, gb = terrain.At(b.x, b.y) - .1f;
-                Vector3 n = f.N * half;
-                Vector3 a0 = new Vector3(a.x, ga, a.y), b0 = new Vector3(b.x, gb, b.y), a1 = a0 + Vector3.up * (h + .1f), b1 = b0 + Vector3.up * (h + .1f);
-                sink.Quad(surface, a0 + n, b0 + n, b1 + n, a1 + n, f.N, Vector2.zero, new Vector2(f.L, 0), new Vector2(f.L, h), new Vector2(0, h));
-                sink.Quad(surface, b0 - n, a0 - n, a1 - n, b1 - n, -f.N, Vector2.zero, new Vector2(f.L, 0), new Vector2(f.L, h), new Vector2(0, h));
-                sink.Quad(hedge ? surface : CityStyle.StoneTrim.Shade(.85f), a1 + n, b1 + n, b1 - n, a1 - n, Vector3.up, Vector2.zero, new Vector2(f.L, 0), new Vector2(f.L, half * 2), new Vector2(0, half * 2));
-                ColliderQuad(build, a0, b0, b1, a1, true);
+                var q = new Vector2(raw[k], raw[k + 1]);
+                if (p.Count == 0 || (q - p[p.Count - 1]).sqrMagnitude > .0025f) p.Add(q);
+            }
+            int count = p.Count;
+            if (count < 2) return;
+            bool closed = count > 3 && (p[0] - p[count - 1]).sqrMagnitude < .0026f;
+            // Both faces are mitred at every bend, so consecutive stretches share their corners and no crack opens between them.
+            var side = new Vector2[count];
+            var ground = new float[count];
+            for (int k = 0; k < count; k++)
+            {
+                Vector2 before = k > 0 ? (p[k] - p[k - 1]).normalized : closed ? (p[count - 1] - p[count - 2]).normalized : Vector2.zero;
+                Vector2 after = k < count - 1 ? (p[k + 1] - p[k]).normalized : closed ? (p[1] - p[0]).normalized : Vector2.zero;
+                if (before == Vector2.zero) before = after;
+                if (after == Vector2.zero) after = before;
+                Vector2 n0 = new Vector2(-before.y, before.x), n1 = new Vector2(-after.y, after.x), m = n0 + n1;
+                float length = m.magnitude;
+                side[k] = length < .3f ? n1 * half : m / length * (half / Mathf.Max(.4f, Vector2.Dot(m / length, n1)));
+                ground[k] = terrain.At(p[k].x, p[k].y) - .1f;
+            }
+            Vector3 P(int k, float s, float lift) => new Vector3(p[k].x + side[k].x * s, ground[k] + lift, p[k].y + side[k].y * s);
+            float run = 0, top = h + .1f;
+            for (int k = 0; k + 1 < count; k++)
+            {
+                var d = p[k + 1] - p[k];
+                float length = d.magnitude;
+                var n = new Vector3(-d.y, 0, d.x) / length;
+                sink.Quad(surface, P(k, 1, 0), P(k + 1, 1, 0), P(k + 1, 1, top), P(k, 1, top), n, new Vector2(run, 0), new Vector2(run + length, 0), new Vector2(run + length, top), new Vector2(run, top));
+                sink.Quad(surface, P(k + 1, -1, 0), P(k, -1, 0), P(k, -1, top), P(k + 1, -1, top), -n, new Vector2(run, 0), new Vector2(run + length, 0), new Vector2(run + length, top), new Vector2(run, top));
+                sink.Quad(coping, P(k, 1, top), P(k + 1, 1, top), P(k + 1, -1, top), P(k, -1, top), Vector3.up, new Vector2(run, 0), new Vector2(run + length, 0), new Vector2(run + length, half * 2), new Vector2(run, half * 2));
+                ColliderQuad(build, P(k, 0, 0), P(k + 1, 0, 0), P(k + 1, 0, top), P(k, 0, top), true);
+                run += length;
+            }
+            if (closed) return;
+            foreach (int k in new[] { 0, count - 1 })
+            {
+                var d = (k == 0 ? p[0] - p[1] : p[count - 1] - p[count - 2]).normalized;
+                sink.Quad(surface, P(k, 1, 0), P(k, -1, 0), P(k, -1, top), P(k, 1, top), new Vector3(d.x, 0, d.y), Vector2.zero, new Vector2(half * 2, 0), new Vector2(half * 2, top), new Vector2(0, top));
             }
         }
 

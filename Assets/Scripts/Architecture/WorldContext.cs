@@ -76,6 +76,7 @@ namespace Padova.Architecture
         {
             string folder=CityPack.DefaultFolder;
             Roads=CityRoads.Load(System.IO.Path.Combine(folder,"roads.bin"));
+            if(Streamer)Streamer.SetRoads(Roads);
             if(Roads!=null)
             {
                 // Plain centrelines for code and tests that only need geometry and names.
