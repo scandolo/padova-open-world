@@ -113,6 +113,7 @@ def drive_measurements():
 def run_case(name):
     if name in ['traffic','taxi','race','police']:return activity_case(name)
     if name=='drive':return drive_case()
+    if name=='night':return night_case()
     if name not in ['map','car','flight','crowd','quiet_flight','santo','prato','landmarks']:
         reset();return original(name) # Leave any car or plane first: the walking cases need the character.
     reset()
@@ -213,6 +214,38 @@ def run_case(name):
         assert end['worldBuildings']>19000,end
         return {'count':end['npcs'],'moving':end['npcsMoved'],'distanceMetres':end['npcTravel'],'invalidNavigation':end['invalidNav']}
 
+def wait(fetch,predicate,timeout=15):
+    end=time.monotonic()+timeout
+    while True:
+        s=fetch()
+        if predicate(s):return s
+        if time.monotonic()>end:raise AssertionError(('Condition timed out',s))
+        time.sleep(.1)
+
+def night_case():
+    # The clock, the lights and the sound: T skips ahead, headlights follow the dark, the engine works through its gears, Q is the horn.
+    clock=lambda:v.call('city_time')
+    reset();start=clock()
+    assert start['ready'] and start['sound'] and start['night']==0 and not start['headlights'],start
+    v.press('T');skipped=wait(clock,lambda c:c['skips']==1 and c['hour']>=13.9)
+    v.call('city_time','--hour',22,'--running',0);dark=clock()
+    assert dark['night']>.95 and dark['sun']<start['sun']*.25,dark
+    enter_car();lit=wait(clock,lambda c:c['headlights'])
+    v.down('UpArrow')
+    try:revved=wait(clock,lambda c:c['gear']>=1 and c['rpm']>.3,12)
+    finally:v.up('UpArrow')
+    v.down('Q')
+    try:honk=wait(clock,lambda c:c['honks']==1 and c['hornHeld'],4)
+    finally:v.up('Q')
+    wait(clock,lambda c:not c['hornHeld'],4)
+    # A lit suburban street for the picture: lamps, pools of light and the car's own beam.
+    moved=v.call('city_drive','--x',1935,'--z',-2417);assert moved['success'],moved
+    time.sleep(4);screenshot=v.capture('world/night-native.png')
+    v.call('city_time','--hour',10,'--running',1);day=clock()
+    assert day['night']==0,day
+    wait(clock,lambda c:not c['headlights'],4)
+    return {'skippedToHour':skipped['hour'],'nightSun':dark['sun'],'headlights':True,'gear':revved['gear'],'rpm':revved['rpm'],'honks':honk['honks'],'muted':honk['volume']==0,'screenshot':screenshot}
+
 def enter_car():
     v.call('world_fixture','--name','car');until(lambda s:s['nearby']!='')
     v.press('Enter');return until(lambda s:s['mode']=='drive')
@@ -308,7 +341,7 @@ def activity_case(name):
 
 v.run_case=run_case
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,landmarks,santo,prato,visual')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--build',action='store_true');p.add_argument('--editor',action='store_true');p.add_argument('--measure',action='store_true');p.add_argument('--ignore-focus',action='store_true',help='QA only: keep accepting input if another app takes focus');p.add_argument('--headless',action='store_true',help='Launch the native Player hidden in the background: full rendering and HUD, no visible window, no focus change');p.add_argument('--case',default='animation,controls,locomotion,jump,collision,recovery,map,car,drive,flight,crowd,traffic,taxi,race,police,night,landmarks,santo,prato,visual')
     args=p.parse_args()
     if args.editor:
         v.EDITOR=True
