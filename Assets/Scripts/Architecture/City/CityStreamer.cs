@@ -24,7 +24,11 @@ namespace Padova.City
         public int Tiles;
         public int DetailTiles, ColliderTiles, Pending;
         public long Vertices;
-        public float LastApplyMilliseconds;
+        public float LastApplyMilliseconds, SlowestApplyMilliseconds;
+        /// <summary>Accumulated cost by stage (ms): worker meshing, worker facades, collider cooking, main-thread uploads.</summary>
+        public double ShellMs, DetailMs, BakeMs, UploadMs;
+        public int ShellJobs, DetailJobs, BakeJobs;
+        long shellTicks, detailTicks, bakeTicks;
 
         public CityPack Pack { get; private set; }
         Texture2DArray layers;
@@ -95,7 +99,7 @@ namespace Padova.City
         void Start()
         {
             // Stand on real ground from the first frame; the rest of the city streams in behind the fog.
-            if (Application.isPlaying && Pack != null && Camera.main) Sync(Camera.main.transform.position, 260, 260, DetailRadius);
+            if (Application.isPlaying && Camera.main) Prepare(Camera.main.transform.position);
         }
 
         void Update()
@@ -156,7 +160,7 @@ namespace Padova.City
             if (detail < 0) detail = DetailRadius;
             float height = Mathf.Max(0, focus.y - Pack.Terrain.At(focus.x, focus.z) - 35);
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            int running = 0, applied = 0;
+            int running = 0, applied = 0, baking = 0;
             scratch.Clear();
             foreach (var tile in tiles.Values) scratch.Add(tile);
             scratch.Sort((a, b) => a.Distance.CompareTo(b.Distance));
@@ -165,6 +169,7 @@ namespace Padova.City
             {
                 if (tile.ShellJob != null && !tile.ShellJob.IsCompleted) running++;
                 if (tile.DetailJob != null && !tile.DetailJob.IsCompleted) running++;
+                if (tile.BakeJob != null && !tile.BakeJob.IsCompleted) baking++;
             }
             var terrain = Pack.Terrain;
             var levels = Pack.Index.levels;
@@ -178,12 +183,23 @@ namespace Padova.City
                     if (tile.ShellJob == null && (wait || running < MaxJobs))
                     {
                         int tx = tile.Tx, tz = tile.Tz;
-                        tile.ShellJob = Task.Run(() => { var data = pack.Load(tx, tz); return data == null ? null : TileMesher.Shell(data, terrain, levels); });
-                        running++;
+                        System.Func<TileBuild> work = () =>
+                        {
+                            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            var data = pack.Load(tx, tz);
+                            var built = data == null ? null : TileMesher.Shell(data, terrain, levels);
+                            System.Threading.Interlocked.Add(ref shellTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
+                            return built;
+                        };
+                        // A blocking caller does the work itself: pool threads of a hidden or busy app can be starved.
+                        tile.ShellJob = wait ? Task.FromResult(work()) : Task.Run(work);
+                        running++; ShellJobs++;
                     }
                     if (tile.ShellJob != null && (wait || tile.ShellJob.IsCompleted) && budget)
                     {
+                        double before = watch.Elapsed.TotalMilliseconds;
                         ApplyShell(tile, tile.ShellJob.Result);
+                        UploadMs += watch.Elapsed.TotalMilliseconds - before;
                         tile.ShellJob = null; applied++;
                     }
                 }
@@ -196,7 +212,15 @@ namespace Padova.City
                 {
                     int ground = tile.Ground && tile.Ground.vertexCount > 0 ? tile.Ground.GetInstanceID() : 0, walls = tile.Collider.GetInstanceID();
                     bool hasWalls = tile.Collider.vertexCount > 0;
-                    tile.BakeJob = Task.Run(() => { if (ground != 0) Physics.BakeMesh(ground, false); if (hasWalls) Physics.BakeMesh(walls, false); });
+                    System.Action bake = () =>
+                    {
+                        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                        if (ground != 0) Physics.BakeMesh(ground, false);
+                        if (hasWalls) Physics.BakeMesh(walls, false);
+                        System.Threading.Interlocked.Add(ref bakeTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
+                    };
+                    if (wait) { bake(); tile.BakeJob = Task.CompletedTask; } else if (baking < 2) { tile.BakeJob = Task.Run(bake); baking++; }
+                    if (tile.BakeJob != null) BakeJobs++;
                 }
                 if (tile.BakeJob != null && (wait || tile.BakeJob.IsCompleted))
                 {
@@ -224,12 +248,21 @@ namespace Padova.City
                     if (tile.DetailJob == null && (wait || running < MaxJobs))
                     {
                         var build = new TileBuild { Data = tile.Data };
-                        tile.DetailJob = Task.Run(() => { TileMesher.Detail(build); return build; });
-                        running++;
+                        System.Func<TileBuild> work = () =>
+                        {
+                            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            TileMesher.Detail(build);
+                            System.Threading.Interlocked.Add(ref detailTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
+                            return build;
+                        };
+                        tile.DetailJob = wait ? Task.FromResult(work()) : Task.Run(work);
+                        running++; DetailJobs++;
                     }
                     if (tile.DetailJob != null && (wait || tile.DetailJob.IsCompleted) && budget)
                     {
+                        double before = watch.Elapsed.TotalMilliseconds;
                         ApplyDetail(tile, tile.DetailJob.Result);
+                        UploadMs += watch.Elapsed.TotalMilliseconds - before;
                         tile.DetailJob = null; applied++;
                     }
                 }
@@ -241,7 +274,16 @@ namespace Padova.City
                 }
                 if (tile.Detail) DetailTiles++;
             }
+            double scale = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            ShellMs = shellTicks * scale; DetailMs = detailTicks * scale; BakeMs = bakeTicks * scale;
             LastApplyMilliseconds = (float)watch.Elapsed.TotalMilliseconds;
+            if (!wait) SlowestApplyMilliseconds = Mathf.Max(SlowestApplyMilliseconds, LastApplyMilliseconds);
+        }
+
+        /// <summary>Blocks until ground, walls and nearby facades around a point exist: for spawns, teleports and fast travel.</summary>
+        public void Prepare(Vector3 focus)
+        {
+            if (Pack != null) Sync(focus, 260, 260, DetailRadius);
         }
 
         void Sync(Vector3 focus, float shell, float collide, float detail)
