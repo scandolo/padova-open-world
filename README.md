@@ -1,17 +1,16 @@
 # Padova Open World
 
-A native macOS exploration game built with **Unity 6.3 LTS and the Universal Render Pipeline (URP)**. Start in Piazza della Frutta, walk through central Padova, drive a car, set a waypoint on the city map, or explore from an assisted sightseeing plane.
+A native macOS open-world game built with **Unity 6.3 LTS and the Universal Render Pipeline (URP)**. Start in Piazza della Frutta, walk through central Padova, take a car anywhere in the city, run taxi fares, outrun the police, or see it all from an assisted sightseeing plane.
 
 The city uses public municipal geography: real street plans, building outlines, courtyards, recorded elevations and portico clearances. Architectural detail is modelled in 3D. **Ordinary façades and roofs use documented local typology; they are not measured elevations or scans of every building.** Photographs are not projected onto façades.
 
 ## Current prototype
 
-- A detailed historic core around Palazzo della Ragione and the Erbe, Frutta and Signori piazzas.
-- A **3 × 2.6 km** surrounding area with **19,355 additional surveyed volume units**. Several units can belong to one building.
-- Modelled Palazzo della Ragione, with additional details for Torre dell'Orologio, Palazzo del Capitanio, the Duomo, baptistery and Palazzo del Bo.
-- An animated third-person character, walking/running/jumping, collision and a following camera.
-- 32 pedestrians, 12 market stalls, 11 lamps, six benches and trees placed inside mapped green areas.
-- Three drivable cars, an interactive map with waypoints, eight discoverable places and an assisted aircraft.
+- **The whole comune of Padova, generated from data**: 100,134 surveyed building volumes, every carriageway, sidewalk, cycle path, canal, garden wall and tree row, streamed around the player in 256 m tiles. Nothing outside the historic core is modelled by hand. See [the city engine](docs/CITY_ENGINE.md).
+- A hand-detailed historic core around Palazzo della Ragione and the Erbe, Frutta and Signori piazzas, plus Blender landmarks (the Santo, Prato della Valle, Santa Giustina and others).
+- A drivable road graph of the whole city (999 km of streets with one-way rules, speed classes and signals), 550 named places, 41 districts and a two-sheet city map.
+- Ten vehicle types (utilitaria, berlina, van, taxi, police pantera, scooter, Ape, bus, tram, bicycle) with arcade physics; traffic, police pursuits with wanted stars, taxi fares and a checkpoint sprint.
+- An animated third-person character, pedestrians in the centre, an interactive map with waypoints, discoverable places and an assisted sightseeing plane.
 
 Development, builds and tests run locally. Unity Cloud, Unity Version Control, Cloud Build and paid Unity Gaming Services are disconnected.
 
